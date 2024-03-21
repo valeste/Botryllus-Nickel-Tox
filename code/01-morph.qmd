@@ -29,11 +29,14 @@ Data below was collected from a pilot study conducted in Autumn 2023 where field
 Make sure you have made your Google sheet publicly available to anyone that has the link. If you make any updates to the sheet just re-curl the data, meaning just re-run the code below.
 
 ```{r, engine='bash', eval=FALSE}
+cd ..
+
 curl -L https://docs.google.com/spreadsheets/d/10uM3N3PD9xIP4yUnadfhkcXa8TPMRMD-adOIKbmkYzY/export?exportFormat=csv | tee data/morph.csv
 ```
 Read in the data to your local R environment.
 
 ```{r, eval=TRUE}
+setwd('..')
 morph <- read.csv(file = "data/morph.csv")  
 ```
 
@@ -41,10 +44,14 @@ morph <- read.csv(file = "data/morph.csv")
 
 ```{r, eval=TRUE}
 morph$date <- mdy(morph$date) #convert the date column from characters to true date
+```
 
+```{r, eval=TRUE}
 morph <- morph %>%
   separate(jar_id, c("treatment_mg_per_L", "replicate"), sep = "-") #create two new columns, treatment and replicate from jar id 
+```
 
+```{r, eval=TRUE}
 morph_fact <- morph %>%
   mutate(treatment_mg_per_L = as.factor(treatment_mg_per_L)) %>%
   mutate(stage = as.factor(stage)) %>%
@@ -54,9 +61,64 @@ morph_fact <- morph %>%
 ```
 
 ```{r}
-summary(morph_fact)
+# Create a new column 'simple_stage' based on conditions
+morph_fact <- morph_fact %>%
+  mutate(simple_stage = case_when(
+    stage %in% c("A1", "A2") ~ "A",
+    stage %in% c("B1", "B2") ~ "B",
+    stage %in% c("C1", "C2") ~ "C",
+    stage == "TO" ~ "TO",
+    TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
+  ))
 ```
 
+New data frame with only the rows of infor after 24 hours of exposure.
+```{r}
+stage_24 <- morph_fact[morph_fact$hpe == 24, ]
+```
+
+
+Count data on blastogenic stage per treatment
+```{r}
+stage_summary <- stage_24 %>%
+  group_by(treatment_mg_per_L, simple_stage) %>%
+  summarise(count = n())  # n() calculates the count of each group
+
+print(stage_summary)
+```
+
+# Identify Distribution of Blastogenic Stage per Treatment at 24 hpe
+
+
+```{r}
+setwd('..')
+png(filename = "output/blastogenic_dist.png", width = 700, height = 600)
+
+
+ggplot(stage_summary, aes(x = treatment_mg_per_L, y = count, fill = simple_stage)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.9) +
+   scale_fill_manual(name = "Stage",
+                     values = c("#FFD92F", "#E78AC3",  "#8DA0CB", "#A6D854"),  # Specify the colors
+                     labels = c("A", "B", "C", "TO")) +
+    labs(x = "Treatment (Nickel Chloride mg/L)",
+       y = "Count") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, 8)) +
+  theme(panel.grid.major.x = element_blank(),  # Remove major vertical gridlines
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(color = "darkgrey", size = 0.05),
+        panel.grid.minor.y = element_blank(), 
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15),
+        legend.text = element_text(size = 15),
+        legend.title = element_text(size = 15))
+dev.off()
+```
+
+
+
+
+# Exploring Health Score Decline After Nickel Exposure
 ```{r, eval=TRUE}
 # Calculate the mean health score binned by hours post-exposure and by treatment
 mean_health_score <- morph_fact %>%
