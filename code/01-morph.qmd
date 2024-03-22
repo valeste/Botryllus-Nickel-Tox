@@ -87,6 +87,13 @@ stage_summary <- stage_24 %>%
 print(stage_summary)
 ```
 
+write table for blastogenic stage count.
+
+```{r}
+setwd('..')
+write.csv(stage_summary, file ="output/blast_count.csv")
+```
+
 # Identify Distribution of Blastogenic Stage per Treatment at 24 hpe
 
 
