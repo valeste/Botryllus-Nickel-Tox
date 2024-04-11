@@ -12,7 +12,6 @@ library(tidyr)
 library(dplyr)
 library(hrbrthemes)
 library(ggplot2)
-library(car)
 library(RColorBrewer)
 library(ggpubr)
 knitr::opts_chunk$set(echo = TRUE,

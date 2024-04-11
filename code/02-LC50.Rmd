@@ -1,0 +1,65 @@
+---
+title: "LC50 Nickel Experiment 1"
+author: "Celeste Valdivia"
+date: "2024-04-10"
+output: html_document
+---
+
+```{r, eval =TRUE}
+library(knitr)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(hrbrthemes)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = FALSE)
+```
+
+# Retrieving Data from Google Sheets
+
+
+Make sure you have made your Google sheet publicly available to anyone that has the link. If you make any updates to the sheet just re-curl the data, meaning just re-run the code below.
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1JtJO3EX06BYK4pYwZZ7b7ZCoTyZcAeuTRka_9kA-yPk/export?exportFormat=csv | tee data/LC50.csv
+```
+
+Read in the data to your local R environment.
+
+```{r, eval=TRUE}
+setwd('..')
+LC50 <- read.csv(file = "data/LC50.csv")  
+```
+
+# Cleaning up Data
+
+```{r, eval=TRUE}
+LC50$Date <- mdy(LC50$Date) #convert the Date column from characters to true Date
+```
+
+```{r, eval=TRUE}
+LC50_fact <- LC50 %>%
+  mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
+  mutate(Stage = as.factor(Stage)) %>%
+  mutate(Tunicate.ID = as.factor(Tunicate.ID)) %>%
+  mutate(Date = as.factor(Date)) %>%
+  mutate(treatment_order = factor(paste(Ni.Conc., Tunicate.ID))) # Create a new variable for ordering by treatment
+```
+
+```{r}
+# Create a new column 'simple_Stage' based on conditions
+LC50_fact <- LC50_fact %>%
+  mutate(simple_Stage = case_when(
+    Stage %in% c("A1", "A2") ~ "A",
+    Stage %in% c("B1", "B2") ~ "B",
+    Stage %in% c("C1", "C2") ~ "C",
+    Stage == "D" ~ "D",
+    TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
+  ))
+```
+
