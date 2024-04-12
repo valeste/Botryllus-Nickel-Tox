@@ -63,3 +63,33 @@ LC50_fact <- LC50_fact %>%
   ))
 ```
 
+# summary stats
+
+# Calculate Percent Mortality per Treatment
+
+```{r}
+calc_mort_perecnt <- function(data) {
+  
+  total_individuals <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = length)
+  
+  total_mortality <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = sum)
+  
+  merged_data <- merge(total_individuals, total_mortality, by = c( "hpe",  "Ni.Conc."), suffixes = c(".total", ".count"))
+  
+  merged_data$percentage_mortality <- (merged_data$Mortality.count / merged_data$Mortality.total) *100
+  
+  return(merged_data)
+}
+
+mortality_percentage <- calc_mort_perecnt(LC50_fact)
+
+print(mortality_percentage)
+```
+
+
+# Exploratory percent mort graph
+
+```{r}
+ggplot()
+```
+
