@@ -40,18 +40,14 @@ LC50 <- read.csv(file = "data/LC50.csv")
 
 ```{r, eval=TRUE}
 LC50$Date <- mdy(LC50$Date) #convert the Date column from characters to true Date
-```
 
-```{r, eval=TRUE}
 LC50_fact <- LC50 %>%
   mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
   mutate(Stage = as.factor(Stage)) %>%
   mutate(Tunicate.ID = as.factor(Tunicate.ID)) %>%
   mutate(Date = as.factor(Date)) %>%
   mutate(treatment_order = factor(paste(Ni.Conc., Tunicate.ID))) # Create a new variable for ordering by treatment
-```
 
-```{r}
 # Create a new column 'simple_Stage' based on conditions
 LC50_fact <- LC50_fact %>%
   mutate(simple_Stage = case_when(
@@ -90,6 +86,33 @@ print(mortality_percentage)
 # Exploratory percent mort graph
 
 ```{r}
-ggplot()
+ggplot(mortality_percentage, aes(x=Ni.Conc., y=percentage_mortality)) + 
+  geom_point( ) +
+  facet_wrap(~ hpe, labeller = as_labeller(c("0" = "0 hpe", "24" = "24 hpe", "48" = "48 hpe", "72" = "72 hps", "96" = "96 hpe"))) +
+      labs(x = "Nickel mg/L",
+       y = "Mortality (%)") 
 ```
 
+# Dose Response Models Readings
+
+We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and cease blood movement at 1000 mg/L after 48 hours.
+
+https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0146021
+
+https://www.linkedin.com/pulse/simple-lc50-calculation-pesticide-toxicity-bioassay-using-adhiwibawa
+
+Eventually will need to explore packages for assessing LC50 or EC50.
+
+# Exploratory Blastogenic Arrest
+
+https://www.sciencedirect.com/science/article/pii/S0012160618303828
+
+above they refer to arrest and they interchangibly refer to torpor in 
+
+We may define effect concentration 50% by blastogenic arrest or blastogenic development inhibition in the animal as a chronic endpoint of nickel toxicity. 
+
+a. Need to account for rate of blastogenesis again. One step per day is normal and should be found in the control animal.
+
+b. In the 100 treatment for more than 3 days we see no change in blastogenic rate. The line will be flat over time.
+
+c. 
