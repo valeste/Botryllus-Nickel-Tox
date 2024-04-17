@@ -1,0 +1,134 @@
+---
+title: "03-RNAseqSamples"
+author: "Celeste Valdivia"
+date: "2024-04-15"
+output: html_document
+---
+
+```{r, eval =TRUE}
+library(knitr)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(hrbrthemes)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+library(stringr)
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = FALSE)
+```
+
+# Objective
+
+Determine which 12 of the 39 RNA samples available from the Autumn 2023 nickel trials to send off for RNAseq. We are targeting all late stage (C2-D) and high (45 mg/L nickel) vs control.
+
+# Revtrieve Data
+We will need both the morphometric data and the nanodrop readings. 
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/10uM3N3PD9xIP4yUnadfhkcXa8TPMRMD-adOIKbmkYzY/export?exportFormat=csv | tee data/morph.csv
+```
+
+nanodrop data
+```{r, engine='bash', eval=FALSE}
+
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1A8RAq72h2FLstFS7FcUE5hDpYsaJg9ql0M7iGxuN2xA/export?exportFormat=csv | tee data/nanodrop.csv
+```
+
+Read in the data to your local R environment.
+
+```{r, eval=TRUE}
+setwd('..')
+morph <- read.csv(file = "data/morph.csv")  
+```
+
+``` {r}
+setwd('..')
+nano <- read.csv(file = "data/nanodrop.csv")
+```
+
+# Cleaning up Data for Morph
+
+```{r, eval=TRUE}
+morph$date <- mdy(morph$date) #convert the date column from characters to true date
+```
+
+```{r, eval=TRUE}
+morph <- morph %>%
+  separate(jar_id, c("treatment", "replicate"), sep = "-") #create two new columns, treatment and replicate from jar id 
+```
+
+```{r, eval=TRUE}
+morph <- morph %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  mutate(stage = as.factor(stage)) %>%
+  mutate(animal_id = as.factor(animal_id)) %>%
+  mutate(date = as.factor(date)) %>%
+  mutate(treatment_order = factor(paste(treatment, animal_id))) # Create a new variable for ordering by treatment
+```
+
+```{r}
+# Create a new column 'simple_stage' based on conditions
+morph <- morph %>%
+  mutate(simple_stage = case_when(
+    stage %in% c("A1", "A2") ~ "A",
+    stage %in% c("B1", "B2") ~ "B",
+    stage %in% c("C1", "C2") ~ "C",
+    stage == "TO" ~ "D",
+    TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
+  ))
+```
+
+New data frame with only the rows after 24 hours of exposure when the RNA samples were saved.
+
+```{r}
+morph_24 <- morph[morph$hpe == 24, ]
+```
+
+
+
+# Cleaning up Nano Data
+
+Extract identifiers from the sample_id column and make new columns.
+
+```{r}
+nano <- nano %>%
+  mutate(jar_id = str_extract(sample_id, "(0|5|45)-R[1-4]"))%>%
+  mutate(experiment = str_extract(sample_id, "E[1-4]"))
+```
+
+```{r, eval=TRUE}
+nano <- nano %>%
+  separate(jar_id, c("treatment", "replicate"), sep = "-") #create two new columns, treatment and replicate from jar id 
+```
+
+
+```{r, eval=TRUE}
+nano$date <- mdy(nano$date) #convert the date column from characters to true date
+```
+
+```{r, eval=TRUE}
+nano <- nano %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  mutate(experiment = as.factor(experiment)) %>%
+  mutate(date = as.factor(date))
+```
+
+# Join Data Frames
+
+```{r}
+# Perform the inner join with an additional condition
+merged_data <- inner_join(nano, morph, by = c("date", "experiment", "replicate", "treatment"))
+```
+
+# Reduce data frame to only columns of interest
+
+```{r}
+merged <- merged_data[, c("date", "rna_conc_ng/uL", "A260.A280", "treatment", "experiment", "replicate", "stage", "stage_2", "simple_stage", "animal_id", "health", "attacment")]
+```
+
