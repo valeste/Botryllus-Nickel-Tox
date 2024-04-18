@@ -65,9 +65,10 @@ LC50_fact <- LC50_fact %>%
     Health %in% c("5", "6") ~ "3",
     Health %in% c("7", "8") ~ "4",
     Health %in% c("9", "10") ~ "5",
-    TRUE ~ NA_character_
-  ))
+    TRUE ~ NA_character_)) %>%
+  transform(simple_health = as.numeric(simple_health))
 
+summary(LC50_fact)
 ```
 
 # Summary Stats
@@ -97,8 +98,16 @@ calc_mort_perecnt <- function(data) {
 
 mortality_percentage <- calc_mort_perecnt(LC50_fact)
 
+mortality_percentage$hpe <- as.character(mortality_percentage$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
+
 print(mortality_percentage)
 summary(mortality_percentage)
+
+test <- transform(mortality_percentage,
+                             Ni.Conc. = as.numeric(Ni.Conc.))
+
+mortality_percentage$Ni.Conc. <- as.numeric(mortality_percentage$Ni.Conc.) # Did this so geom_smooth actually works
+
 ```
 
 
@@ -106,11 +115,18 @@ summary(mortality_percentage)
 # Exploratory percent mort graph
 
 ```{r}
-ggplot(mortality_percentage, aes(x=Ni.Conc., y=percentage_mortality)) + 
+ggplot(mortality_percentage, aes(x=Ni.Conc., y=percentage_mortality, color = hpe)) + 
   geom_point() +
-  facet_wrap(~ hpe, labeller = as_labeller(c("0" = "0 hpe", "24" = "24 hpe", "48" = "48 hpe", "72" = "72 hps", "96" = "96 hpe"))) +
+  facet_wrap(~ hpe) +
+  geom_smooth(aes(fill = hpe), method = "loess", span = 1) +
       labs(x = "Nickel mg/L",
-       y = "Mortality (%)")
+       y = "Mortality (%)")  +
+scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
+  ylim(0, 5) +
+  geom_smooth(aes(fill = Ni.Conc.), method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
+  labs(x = "hpe", 
+       y = "Health"
+       )
 ```
 
 # Dose Response Models Readings
@@ -137,13 +153,15 @@ b. In the 100 treatment for more than 3 days we see no change in blastogenic rat
 
 Exploratory health
 ```{r}
-ggplot(LC50_fact, aes(x = hpe, y = Health, color = Ni.Conc.)) + 
+ggplot(LC50_fact, aes(x = hpe, y = simple_health, color = Ni.Conc.)) + 
   geom_point() +
   facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
-  ylim(0, 10) +
+  ylim(0, 5) +
   geom_smooth(aes(fill = Ni.Conc.), method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
-  labs(x = "hpe", y = "Health")
+  labs(x = "hpe", 
+       y = "Health"
+       )
 
 ```
 
@@ -153,12 +171,15 @@ ggplot(LC50_fact, aes(x = hpe, y = Health, color = Ni.Conc.)) +
 y_breaks <- 1:7
 y_labels <- c("A1", "A2", "B1", "B2", "C1", "C2", "D")
 
+stage_mapping <- c(A1 = 1, A2 = 2, B1 = 3, B2 = 4, C1 = 5, C2 = 6, D = 7)
+
 LC50_fact$Stage_Num <- stage_mapping[LC50_fact$Stage]
 ```
 
 
+
 ```{r}
-ggplot(LC50_fact, aes(x = hpe, y = Stage_Num, color = Tunicate.ID)) + 
+ggplot(LC50_fact, aes(x = hpe, y = Stage_Num)) + 
   geom_point(alpha = 0.6, size = 2) +  # Adjust transparency and size of points
   geom_line(aes(group = Tunicate.ID)) +  # Connect points with lines for each Tunicate.ID
   scale_y_continuous(breaks = y_breaks, labels = y_labels) +  # Custom breaks and labels for y-axis
@@ -168,7 +189,7 @@ ggplot(LC50_fact, aes(x = hpe, y = Stage_Num, color = Tunicate.ID)) +
 ```
 
 
-Test Data
+# Test Data
 
 ```{r}
 df <- LC50_fact[LC50_fact$Tunicate.ID == "DM012024_C01", ]
