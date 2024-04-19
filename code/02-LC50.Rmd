@@ -41,13 +41,8 @@ LC50 <- read.csv(file = "data/LC50.csv")
 ```{r, eval=TRUE}
 LC50$Date <- mdy(LC50$Date) #convert the Date column from characters to true Date
 
-LC50_fact <- LC50 %>%
-  mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
-  mutate(Tunicate.ID = as.factor(Tunicate.ID)) %>%
-  na.omit
-
 # Create a new column 'simple_Stage' based on conditions
-LC50_fact <- LC50_fact %>%
+LC50 <- LC50 %>%
   mutate(simple_Stage = case_when(
     Stage %in% c("A1", "A2") ~ "A",
     Stage %in% c("B1", "B2") ~ "B",
@@ -57,7 +52,7 @@ LC50_fact <- LC50_fact %>%
   ))
 
 # Create new simplified health scoring
-LC50_fact <- LC50_fact %>%
+LC50 <- LC50 %>%
   mutate(simple_health = case_when(
     Health == "0" ~ "0",
     Health %in% c("1", "2") ~ "1",
@@ -68,14 +63,15 @@ LC50_fact <- LC50_fact %>%
     TRUE ~ NA_character_)) %>%
   transform(simple_health = as.numeric(simple_health))
 
-summary(LC50_fact)
+# add a total column
+summary(LC50)
 ```
 
 # Summary Stats
 
 ```{r}
-avg_zooid <- mean(LC50_fact$Total.Zooids, na.rm = TRUE)
-sd_zooid <- sd(LC50_fact$Total.Zooids, na.rm = TRUE)
+avg_zooid <- mean(LC50$Total.Zooids, na.rm = TRUE)
+sd_zooid <- sd(LC50$Total.Zooids, na.rm = TRUE)
 print(c(avg_zooid, sd_zooid))
 ```
 
@@ -96,38 +92,85 @@ calc_mort_perecnt <- function(data) {
   return(merged_data)
 }
 
-mortality_percentage <- calc_mort_perecnt(LC50_fact)
+mortality_percentage <- calc_mort_perecnt(LC50)
 
 mortality_percentage$hpe <- as.character(mortality_percentage$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
 
 print(mortality_percentage)
 summary(mortality_percentage)
 
-test <- transform(mortality_percentage,
-                             Ni.Conc. = as.numeric(Ni.Conc.))
-
-mortality_percentage$Ni.Conc. <- as.numeric(mortality_percentage$Ni.Conc.) # Did this so geom_smooth actually works
+hist(mortality_percentage$percentage_mortality)
 
 ```
+Data follows a bimodal distribution.
+
+
+# Calculate Survivorship
+```{r}
+calc_survivor_percent <- function(data) {
+  
+  total_individuals <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = length)
+  
+  total_survivor <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = sum)
+  
+  merged_data <- merge(total_individuals, total_survivor, by = c( "hpe",  "Ni.Conc."), suffixes = c(".total", ".count"))
+  
+  merged_data$percentage_survivor <- (merged_data$Alive.count / merged_data$Alive.total) *100
+  
+  return(merged_data)
+}
+
+survival_percent <- calc_survivor_percent(LC50)
+
+survival_percent$hpe <- as.character(survival_percent$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
+
+print(survival_percent)
+summary(survival_percent)
+
+survival_percent$Ni.Conc. <- as.numeric(survival_percent$Ni.Conc.) # Did this so geom_smooth actually works
+```
+
 
 
 
 # Exploratory percent mort graph
 
 ```{r}
-ggplot(mortality_percentage, aes(x=Ni.Conc., y=percentage_mortality, color = hpe)) + 
-  geom_point() +
+mort_exp <- subset(mortality_percentage, hpe != 0)
+
+
+# Plot the data with smoothed curve
+ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+  geom_point(size = 2) +
   facet_wrap(~ hpe) +
-  geom_smooth(aes(fill = hpe), method = "loess", span = 1) +
-      labs(x = "Nickel mg/L",
-       y = "Mortality (%)")  +
-scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
-  ylim(0, 5) +
-  geom_smooth(aes(fill = Ni.Conc.), method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
-  labs(x = "hpe", 
-       y = "Health"
-       )
+  geom_smooth(method = "loess", se = TRUE, span = 0.5, color = "black") + # the geom smooth method is currently incorrect, need to find out how to display what was found to be the LC50 using LC_logit from the ecotox package
+  geom_hline(yintercept = 50, linetype = "dotted", color = "red") +  # Add red dotted line at y = 50
+  labs(x = "Nickel Concentration mg/L",
+       y = "Mortality (%)")
+
+# Plot the data with smoothed curve
+ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+  geom_point(size = 2) +
+  facet_wrap(~ hpe) +
+geom_line() +
+  geom_hline(yintercept = 50, linetype = "dotted", color = "red") +  # Add red dotted line at y = 50
+  labs(x = "Nickel Concentration mg/L",
+       y = "Mortality (%)")
+
 ```
+
+Exploratory survival graph
+```{r}
+ggplot(survival_percent, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) + 
+  facet_wrap(~hpe) +
+  geom_point() +
+  geom_line() +
+      labs(x = "Nickel mg/L",
+       y = "Survival (%)")  
+```
+
+
+
 
 # Dose Response Models Readings
 
@@ -138,6 +181,134 @@ https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0146021
 https://www.linkedin.com/pulse/simple-lc50-calculation-pesticide-toxicity-bioassay-using-adhiwibawa
 
 Eventually will need to explore packages for assessing LC50 or EC50.
+
+Also need to decide that for the ecotox modeling if it makes sense to use a probit, logit, or linear regression model to assess LC50 for whatever time point of interest.
+
+Probit Model:
+The probit model assumes that the dose-response relationship follows a cumulative *normal distribution*.
+It is often used when the response variable is binary (alive/dead) or when the response follows a sigmoidal shape.
+Suitable when responses are discrete and there's a natural threshold for response.
+
+Logit Model:
+Similar to the probit model, the logit model is used for binary response data.
+It assumes that the log odds of the response is linearly related to the dose.
+Like probit, it's suitable for binary responses but may be preferred for computational reasons or if assumptions align better with the data.
+
+Linear Model:
+The linear model assumes a linear relationship between the dose and the response.
+It may be appropriate when responses are continuous and show a linear trend across doses.
+However, it may not capture non-linear relationships well, especially if the response plateaus or changes direction.
+
+Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model.
+
+```{r, dummy ecotox data}
+#install.packages("ecotox")
+library(ecotox)
+
+head(lamprey_tox)
+
+hist(lamprey_tox$response)
+
+m <- LC_logit((response / total) ~ log10(dose), p = c(50, 99),
+weights = total,
+data = lamprey_tox[lamprey_tox$nominal_dose != 0, ],
+subset = c(month == "May"))
+
+print(m)
+
+lc_may <- subset(lamprey_tox, month %in% c("May"))
+p1 <- ggplot(data = lc_may[lc_may$nominal_dose != 0, ],
+  aes(x = dose, y = (response / total))) +
+  geom_point() +
+  geom_smooth(method = "glm",
+   method.args = list(family = binomial(link = "logit")),
+ aes(weight = total), colour = "#FF0000", se = TRUE)
+
+ p1
+
+```
+
+```{r}
+head(LC50)
+
+LC50_24h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+weights = Total,
+data = LC50[LC50$Ni.Conc. != 0, ],
+subset = c(hpe == "24"))
+
+print(LC50_24h)
+```
+
+```{r}
+LC50_48h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+weights = Total,
+data = LC50[LC50$Ni.Conc. != 0, ],
+subset = c(hpe == "48"))
+
+print(LC50_48h)
+```
+
+```{r}
+LC50_72h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+weights = Total,
+data = LC50[LC50$Ni.Conc. != 0, ],
+subset = c(hpe == "72"))
+
+print(LC50_72h)
+```
+```{r}
+LC50_96h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+weights = Total,
+data = LC50[LC50$Ni.Conc. != 0, ],
+subset = c(hpe == "96"))
+print(LC50_96h)
+```
+
+
+combine tibbles
+```{r}
+library(dplyr)
+
+# Assuming LC50_24, LC50_48, ..., LC50_96 are tibbles/data frames containing LC50 results
+# Each tibble should have at least two columns: 'dose' and 'LC50'
+
+# Combine the LC50 results into one data frame
+combined_lc50 <- bind_rows(
+  LC50_24h %>% mutate(time_point = 24),
+  LC50_48h %>% mutate(time_point = 48),
+  LC50_72h %>% mutate(time_point = 72),
+  LC50_96h %>% mutate(time_point = 96)
+)
+
+# Now you have a single data frame 'combined_lc50' containing LC50 results for different time points
+# It should have columns: 'dose', 'LC50', and 'time_point'
+```
+
+```{r}
+# You can now plot the LC50 values over time
+#install.packages("ggrepel")
+library(ggrepel)
+
+#setwd('..')
+#png(filename = "output/LC50_overtime.png", width = 500, height = 300)
+
+# You can now plot the LC50 values over time
+ggplot(combined_lc50, aes(x = time_point, y = dose)) +
+  geom_point() +
+  geom_smooth(method = "loess", color = "black") +  # Set line color to black
+  geom_label_repel(aes(label = paste(time_point,"hour", "LC50", "=", round(dose), "mg/L")), 
+                   size = 3, 
+                   nudge_x = 2, 
+                   nudge_y = 2,
+                   arrow = arrow(length = unit(2, "npc"))) +  # Add labels with arrows
+  labs(x = "Time (hours)", y = " Nickel Concentration (mg/L)") +
+  ylim(0, 1000)  # Set y-axis limits
+
+#dev.off()
+
+```
+
+
 
 # Exploratory Blastogenic Arrest
 
@@ -153,7 +324,7 @@ b. In the 100 treatment for more than 3 days we see no change in blastogenic rat
 
 Exploratory health
 ```{r}
-ggplot(LC50_fact, aes(x = hpe, y = simple_health, color = Ni.Conc.)) + 
+ggplot(LC50, aes(x = hpe, y = simple_health, color = Ni.Conc.)) + 
   geom_point() +
   facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
@@ -166,20 +337,20 @@ ggplot(LC50_fact, aes(x = hpe, y = simple_health, color = Ni.Conc.)) +
 ```
 
 
-
+ddfff
 ```{r}
 y_breaks <- 1:7
 y_labels <- c("A1", "A2", "B1", "B2", "C1", "C2", "D")
 
 stage_mapping <- c(A1 = 1, A2 = 2, B1 = 3, B2 = 4, C1 = 5, C2 = 6, D = 7)
 
-LC50_fact$Stage_Num <- stage_mapping[LC50_fact$Stage]
+LC50$Stage_Num <- stage_mapping[LC50$Stage]
 ```
 
 
 
 ```{r}
-ggplot(LC50_fact, aes(x = hpe, y = Stage_Num)) + 
+ggplot(LC50, aes(x = hpe, y = Stage_Num)) + 
   geom_point(alpha = 0.6, size = 2) +  # Adjust transparency and size of points
   geom_line(aes(group = Tunicate.ID)) +  # Connect points with lines for each Tunicate.ID
   scale_y_continuous(breaks = y_breaks, labels = y_labels) +  # Custom breaks and labels for y-axis
@@ -192,7 +363,7 @@ ggplot(LC50_fact, aes(x = hpe, y = Stage_Num)) +
 # Test Data
 
 ```{r}
-df <- LC50_fact[LC50_fact$Tunicate.ID == "DM012024_C01", ]
+df <- LC50[LC50$Tunicate.ID == "DM012024_C01", ]
 
 stage_mapping <- c(A1 = 1, A2 = 2, B1 = 3, B2 = 4, C1 = 5, C2 = 6, D = 7)
 
