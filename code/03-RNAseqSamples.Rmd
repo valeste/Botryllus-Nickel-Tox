@@ -132,7 +132,7 @@ Major Note: The system that was actually saved on the 24 hour mark is system 1 f
 For RNAseq animal requirements in descending order or importance:
 
 -   Stage C2 or TO/D
--   45 mg/L or 0 mg/L
+-   45 mg/L or 0 mg/L (although I wrote out so the csv file also contains the 5 mg/L option just in case we go with that instead)
 -   Minimum 200 ng RNA available
 -   A260.280 > 1.8
 -   Both Attached
@@ -140,9 +140,7 @@ For RNAseq animal requirements in descending order or importance:
 
 
 ```{r}
-merged <- merged_data[merged_data$hpe == 24, c(1, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19)] # get the rows for only the 24 hour mark since that's the day we saved everything in liquid nitrogen
-
-merged <- merged[merged$treatment != 5, ] # get only the rows for the control and high nickel treatment
+merged <- merged_data[merged_data$hpe == 24, c(1, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20)] # get the rows for only the 24 hour mark since that's the day we saved everything in liquid nitrogen
 
 merged <- merged[merged$stage_2 == "late", ] # get only the rows with animals in the late stage (C2 or D)
 
