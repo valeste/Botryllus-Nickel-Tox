@@ -66,7 +66,7 @@ morph_fact <- morph_fact %>%
     stage %in% c("A1", "A2") ~ "A",
     stage %in% c("B1", "B2") ~ "B",
     stage %in% c("C1", "C2") ~ "C",
-    stage == "TO" ~ "TO",
+    stage == "TO" ~ "D",
     TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
   ))
 ```
@@ -80,7 +80,7 @@ stage_24 <- morph_fact[morph_fact$hpe == 24, ]
 Count data on blastogenic stage per treatment
 ```{r}
 stage_summary <- stage_24 %>%
-  group_by(treatment_mg_per_L, simple_stage) %>%
+  group_by(treatment_mg_per_L, stage_2) %>%
   summarise(count = n())  # n() calculates the count of each group
 
 print(stage_summary)
@@ -94,6 +94,36 @@ write.csv(stage_summary, file ="output/blast_count.csv")
 ```
 
 # Identify Distribution of Blastogenic Stage per Treatment at 24 hpe
+
+
+```{r}
+# Convert treatment_mg_per_L to factor with specific order
+stage_summary$treatment_mg_per_L <- factor(stage_summary$treatment_mg_per_L, levels = c(0, 5, 45))
+
+setwd('..')
+png(filename = "output/blastogenic_dist_2.png", width = 700, height = 600)
+
+ggplot(stage_summary, aes(x = treatment_mg_per_L, y = count, fill = stage_2)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.9) +
+  scale_fill_manual(name = "Stage",
+                    values = c("lightblue",  "blue", "darkblue"),  # Specify the colors
+                    labels = c("early", "mid", "late")) +
+  labs(x = "Treatment (Nickel Chloride mg/L)",
+       y = "Count") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, 8)) +
+  theme(panel.grid.major.x = element_blank(),  # Remove major vertical gridlines
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(color = "darkgrey", size = 0.05),
+        panel.grid.minor.y = element_blank(), 
+        axis.text = element_text(size = 30),
+        axis.title = element_text(size = 30),
+        legend.text = element_text(size = 30),
+        legend.title = element_text(size = 30))
+
+dev.off()
+
+```
 
 
 ```{r}
@@ -120,9 +150,6 @@ ggplot(stage_summary, aes(x = treatment_mg_per_L, y = count, fill = simple_stage
         legend.title = element_text(size = 15))
 dev.off()
 ```
-
-
-
 
 # Exploring Health Score Decline After Nickel Exposure
 ```{r, eval=TRUE}
