@@ -139,31 +139,63 @@ For RNAseq animal requirements in descending order or importance:
 ```{r}
 merged <- merged_data[merged_data$hpe == 24, c(1, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20)] # get the rows for only the 24 hour mark since that's the day we saved everything in liquid nitrogen
 
-merged <- merged[merged$stage_2 == "late", ] # get only the rows with animals in the late stage (C2 or D)
 
-merged <- merged[merged$A260.A280 > 1.5,] # get only rows where the RNA quality is above 1.5 (although ideally its greater than 1.8, may need to do a clean up step)
+# Note we are modifying the entries in this column because there is no available proteomic samples from E1 or E2 since they were sacraficed for dissections    
+merged <- merged %>% 
+  mutate(no_prim_sys2_Prot = case_when(
+    experiment %in% c("E1", "E2") ~ 0,
+    TRUE ~ no_prim_sys2_Prot
+  ))
 
-merged <- merged %>%
+
+merged_all_rows <- merged
+
+merged_late_stage <- merged[merged$stage_2 == "late", ] # get only the rows with animals in the late stage (C2 or D)
+
+merged_late_stage <- merged_late_stage[merged_late_stage$A260.A280 > 1.5,] # get only rows where the RNA quality is above 1.5 (although ideally its greater than 1.8, may need to do a clean up step)
+
+#for late stage
+merged_late_stage <- merged_late_stage %>%
   mutate(attachment_sys2_prot = case_when(
     attachment == "attached" ~ "attached",
     attachment %in% c("both tied", "one tied", "tied") ~ "tied", # simplify the column attachment so that we know if the system intended for proteomics was attached or tied to the glass slide at freezing
     TRUE ~ NA_character_ #handle any other cases or return NA if none match
   ))
 
-merged <- merged %>%
+merged_late_stage <- merged_late_stage %>%
   mutate(attachment_sys1_RNA = case_when(
     attachment %in% c("attached", "one tied") ~ "attached",
     attachment %in% c("both tied", "tied") ~ "tied",
     TRUE ~ NA_character_
   ))
 
-merged <- merged[, -15] # get rid of column attachment since we have our two new columns specifying attachment for RNA and proteomic intended systems
+#for all
+merged_all_rows <- merged_all_rows %>%
+  mutate(attachment_sys2_prot = case_when(
+    attachment == "attached" ~ "attached",
+    attachment %in% c("both tied", "one tied", "tied") ~ "tied", # simplify the column attachment so that we know if the system intended for proteomics was attached or tied to the glass slide at freezing
+    TRUE ~ NA_character_ #handle any other cases or return NA if none match
+  ))
+
+merged_all_rows <- merged_all_rows %>%
+  mutate(attachment_sys1_RNA = case_when(
+    attachment %in% c("attached", "one tied") ~ "attached",
+    attachment %in% c("both tied", "tied") ~ "tied",
+    TRUE ~ NA_character_
+  ))
+
+
+merged_all_rows <- merged_all_rows[, -15] # get rid of column attachment since we have our two new columns specifying attachment for RNA and proteomic intended systems
+
+merged_late_stage <- merged_late_stage[, -15]
 ```
 
 Only have four 45 mg/L samples available for this RNAseq study.
 
 ```{r}
 setwd('..')
-write.csv(merged, file ="output/RNAquality_sampleID_RNAseq.csv")
+write.csv(merged_late_stage, file ="output/RNAquality_sampleID_latestage_RNAseq.csv")
+
+write.csv(merged_all_rows, file = "output/RNAquality_sampleID_allsamples.csv")
 ```
 

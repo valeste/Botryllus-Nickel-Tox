@@ -24,7 +24,7 @@ knitr::opts_chunk$set(echo = TRUE,
 Determine which 12 of the 39 RNA samples available from the Autumn 2023 nickel trials to send off for RNAseq. We are targeting all late stage (C2-D) and high (45 mg/L nickel) vs control.
 
 # Revtrieve Data
-We will need both the morphometric data and the nanodrop readings. 
+We will need both the morphometric data
 
 ```{r, engine='bash', eval=FALSE}
 cd ..
@@ -54,9 +54,8 @@ morph <- morph %>%
 ```{r, eval=TRUE}
 morph <- morph %>%
   mutate(treatment = as.factor(treatment)) %>%
-  mutate(stage = as.factor(stage)) %>%
   mutate(animal_id = as.factor(animal_id)) %>%
-  mutate(date = as.factor(date))
+  mutate(experiment = as.factor(experiment))
 ```
 
 ```{r}
@@ -71,10 +70,13 @@ morph <- morph %>%
   ))
 ```
 
-New data frame with only the rows after 24 hours of exposure when the RNA samples were saved.
-
+clean up data frame to only include rows from the 24 hour mark and samples available for proteomics (half were used for dissections E1 and E2)
 ```{r}
 morph_24 <- morph[morph$hpe == 24, ]
+
+summary(morph_24)
+
+morph_prot <- morph_24[morph_24$experiment %in% c("E3", "E4"), ]
 ```
 
 
@@ -83,7 +85,7 @@ Major Note: The system that was actually saved on the 24 hour mark is system 1 f
 
 
 ```{r}
-df <- morph_24[, c(1, 2, 4, 5, 6, 7, 8, 9, 12, 13, 15)] # get only relevant columns for proteomics
+df <- morph_prot[, c(1, 2, 4, 5, 6, 7, 8, 9, 12, 13, 15)] # get only relevant columns for proteomics
 
 df <- df %>%
   mutate(attachment_sys2 = case_when(
