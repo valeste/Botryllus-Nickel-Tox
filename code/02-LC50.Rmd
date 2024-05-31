@@ -14,12 +14,13 @@ library(hrbrthemes)
 library(ggplot2)
 library(RColorBrewer)
 library(ggpubr)
+library(ecotox)
+library(ggrepel)
 knitr::opts_chunk$set(echo = TRUE,
                       eval = FALSE)
 ```
 
 # Retrieving Data from Google Sheets
-
 
 Make sure you have made your Google sheet publicly available to anyone that has the link. If you make any updates to the sheet just re-curl the data, meaning just re-run the code below.
 
@@ -159,9 +160,12 @@ geom_line() +
 
 ```
 
-Exploratory survival graph
+# Exploratory survival graph
 ```{r}
-ggplot(survival_percent, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) + 
+
+surv_exp <- subset(survival_percent, hpe != 0)
+
+ggplot(surv_exp, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) + 
   facet_wrap(~hpe) +
   geom_point() +
   geom_line() +
@@ -174,27 +178,26 @@ ggplot(survival_percent, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) +
 
 # Dose Response Models Readings
 
-We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and cease blood movement at 1000 mg/L after 48 hours.
+We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and all cease blood movement at 1000 mg/L after 48 hours.
 
 https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0146021
 
 https://www.linkedin.com/pulse/simple-lc50-calculation-pesticide-toxicity-bioassay-using-adhiwibawa
 
-Eventually will need to explore packages for assessing LC50 or EC50.
 
 Also need to decide that for the ecotox modeling if it makes sense to use a probit, logit, or linear regression model to assess LC50 for whatever time point of interest.
 
-Probit Model:
+*Probit Model:*
 The probit model assumes that the dose-response relationship follows a cumulative *normal distribution*.
 It is often used when the response variable is binary (alive/dead) or when the response follows a sigmoidal shape.
 Suitable when responses are discrete and there's a natural threshold for response.
 
-Logit Model:
+*Logit Model:*
 Similar to the probit model, the logit model is used for binary response data.
 It assumes that the log odds of the response is linearly related to the dose.
 Like probit, it's suitable for binary responses but may be preferred for computational reasons or if assumptions align better with the data.
 
-Linear Model:
+*Linear Model:*
 The linear model assumes a linear relationship between the dose and the response.
 It may be appropriate when responses are continuous and show a linear trend across doses.
 However, it may not capture non-linear relationships well, especially if the response plateaus or changes direction.
@@ -289,23 +292,28 @@ combined_lc50 <- bind_rows(
 #install.packages("ggrepel")
 library(ggrepel)
 
-#setwd('..')
-#png(filename = "output/LC50_overtime.png", width = 500, height = 300)
+setwd('..')
+png(filename = "output/LC50_overtime.png",  width = 1000, height = 500)
 
 # You can now plot the LC50 values over time
 ggplot(combined_lc50, aes(x = time_point, y = dose)) +
   geom_point() +
   geom_smooth(method = "loess", color = "black") +  # Set line color to black
   geom_label_repel(aes(label = paste(time_point,"hour", "LC50", "=", round(dose), "mg/L")), 
-                   size = 3, 
+                   size = 6, 
                    nudge_x = 2, 
                    nudge_y = 2,
                    arrow = arrow(length = unit(2, "npc"))) +  # Add labels with arrows
   labs(x = "Time (hours)", y = " Nickel Concentration (mg/L)") +
-  ylim(0, 1000)  # Set y-axis limits
+  ylim(0, 1000) + # Set y-axis limits
+  theme(
+    axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25)
+  )
 
-#dev.off()
-
+dev.off()
 ```
 
 
@@ -324,20 +332,19 @@ b. In the 100 treatment for more than 3 days we see no change in blastogenic rat
 
 Exploratory health
 ```{r}
-ggplot(LC50, aes(x = hpe, y = simple_health, color = Ni.Conc.)) + 
+ggplot(LC50, aes(x = hpe, y = simple_health)) + 
   geom_point() +
   facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
   ylim(0, 5) +
-  geom_smooth(aes(fill = Ni.Conc.), method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
-  labs(x = "hpe", 
-       y = "Health"
+  geom_smooth(method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
+  labs(x = "Time (hours)", 
+       y = "Health Score"
        )
 
 ```
 
 
-ddfff
 ```{r}
 y_breaks <- 1:7
 y_labels <- c("A1", "A2", "B1", "B2", "C1", "C2", "D")
