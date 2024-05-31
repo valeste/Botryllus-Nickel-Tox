@@ -67,6 +67,17 @@ LC50 <- LC50 %>%
 summary(LC50)
 ```
 
+Will need to exclude two individuals from study. DM032024_C03 (0.1 mg/L condition) and DM042024_C02 (1 mg/L condition). Results in 8 replicates for all treatments except 7 only for the 1 mg/L condition.
+
+DM032024_C03: Cut at 24 hour mark.
+
+DM042024_C02: Decline in health as it was not healthy enough to begin with.
+
+```{r}
+LC50 <- LC50[LC50$Tunicate.ID != c("DM032024_C03", "DM042024_C02"),]
+```
+
+
 # Summary Stats
 
 ```{r}
