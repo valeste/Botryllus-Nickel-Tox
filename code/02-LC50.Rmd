@@ -1,10 +1,11 @@
 ---
-title: "LC50 Nickel Experiment 1"
+title: "LC50 Nickel x Botryllus"
 author: "Celeste Valdivia"
 date: "2024-04-10"
 output: html_document
 ---
 
+# Setup
 ```{r, eval =TRUE}
 library(knitr)
 library(tidyverse)
@@ -39,10 +40,14 @@ LC50 <- read.csv(file = "data/LC50.csv")
 
 # Cleaning up Data
 
+## Add simplified scoring columbs and convert dates
+Convert Datees
 ```{r, eval=TRUE}
 LC50$Date <- mdy(LC50$Date) #convert the Date column from characters to true Date
+```
 
-# Create a new column 'simple_Stage' based on conditions
+Simple Stage column added:
+```{r}
 LC50 <- LC50 %>%
   mutate(simple_Stage = case_when(
     Stage %in% c("A1", "A2") ~ "A",
@@ -51,7 +56,10 @@ LC50 <- LC50 %>%
     Stage == "D" ~ "D",
     TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
   ))
+```
 
+Simple health scoring column addd
+```{r}
 # Create new simplified health scoring
 LC50 <- LC50 %>%
   mutate(simple_health = case_when(
@@ -64,9 +72,12 @@ LC50 <- LC50 %>%
     TRUE ~ NA_character_)) %>%
   transform(simple_health = as.numeric(simple_health))
 
-# add a total column
 summary(LC50)
 ```
+
+
+## Remove outlier individuals
+Here we will remove the individuals that are insuitable for our analyses acros the SOD and LC50 assays.
 
 Will need to exclude two individuals from study. DM032024_C03 (0.1 mg/L condition) and DM042024_C02 (1 mg/L condition). Results in 8 replicates for all treatments except 7 only for the 1 mg/L condition.
 
@@ -74,50 +85,93 @@ DM032024_C03: Cut at 24 hour mark.
 
 DM042024_C02: Decline in health as it was not healthy enough to begin with.
 
+DM022024_C01: Does not have a match for the SOD assay at the 96 hr mark so will be excluded from that. Will need to be consistent.
+
 ```{r}
-LC50 <- LC50[LC50$Tunicate.ID != c("DM032024_C03", "DM042024_C02"),]
+t_LC50 <- LC50[!is.na(LC50$true_rep), ]
+```
+
+## Adjust dependent variables into factors
+
+dont use for now.....
+```{r}
+#t_LC50 <-  t_LC50 %>% 
+  #mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
+ # mutate(hpe = as.factor(hpe))
+```
+
+## Produce some data frames for plotting mean health scores per independent variable
+```{r}
+mean_health_score <- t_LC50 %>%
+  group_by(hpe, Ni.Conc.) %>%
+  summarise(
+    mean_health = round(mean(Health, na.rm = TRUE)),
+    se = sd(Health, na.rm = TRUE) / sqrt(n()),
+    .groups = 'drop'  # Ungroup after summarizing
+  )
+
+t_LC50_clean <- t_LC50 %>%
+  filter(!is.na(Health) & is.finite(Health))
+```
+
+## Produce data frames to plot log x-axis health graphs
+Below we produce a couple of data frames that will facilitate plotting the Health Score (y-axis) over Ni Conc (x-axis). Since the concentrations increase on a logarithmic scale, you need to plot it on a logarithmic scale on the x-axis if you want to best see those values. This below produces two new columns called Ni.Conc.trans that forces the 0 to become a 0.01 since the log of 0 would not be plottable in the log graph below using the function scale_x_log10().
+```{r}
+t2_LC50 <- t_LC50 %>%
+  mutate(Ni.Conc.trans = ifelse(Ni.Conc. == 0, 0.01, Ni.Conc.)) %>%
+  filter(hpe !=0)
+
+mean_health_score_no0hpe <- mean_health_score %>%
+  mutate(Ni.Conc.trans = ifelse(Ni.Conc. == 0, 0.01, Ni.Conc.)) %>%
+  filter(hpe !=0)
 ```
 
 
-# Summary Stats
+# Mortality
+
+## Mortality Percent Function
 
 ```{r}
-avg_zooid <- mean(LC50$Total.Zooids, na.rm = TRUE)
-sd_zooid <- sd(LC50$Total.Zooids, na.rm = TRUE)
-print(c(avg_zooid, sd_zooid))
-```
+require(binom)
 
-
-# Calculate Percent Mortality per Treatment
-
-```{r}
-calc_mort_perecnt <- function(data) {
-  
+calc_mort_percent <- function(data) {
   total_individuals <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = length)
-  
   total_mortality <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = sum)
   
-  merged_data <- merge(total_individuals, total_mortality, by = c( "hpe",  "Ni.Conc."), suffixes = c(".total", ".count"))
+  merged_data <- merge(total_individuals, total_mortality, by = c("hpe", "Ni.Conc."), suffixes = c(".total", ".count"))
   
-  merged_data$percentage_mortality <- (merged_data$Mortality.count / merged_data$Mortality.total) *100
+  # Calculate proportions and confidence intervals
+  merged_data$percentage_mortality <- (merged_data$Mortality.count / merged_data$Mortality.total) * 100
+  
+  # Calculate confidence intervals for proportions using Wilson score interval
+  merged_data$ci_lower <- binom::binom.confint(merged_data$Mortality.count, merged_data$Mortality.total, method = "wilson")[,"lower"]
+  merged_data$ci_upper <- binom::binom.confint(merged_data$Mortality.count, merged_data$Mortality.total, method = "wilson")[,"upper"]
   
   return(merged_data)
 }
+```
 
-mortality_percentage <- calc_mort_perecnt(LC50)
+## Using the mortality function on our data
+```{r}
+
+mortality_percentage <- calc_mort_percent(t_LC50)
 
 mortality_percentage$hpe <- as.character(mortality_percentage$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
+```
 
+Review the data frame mortality_percentage.
+```{r}
 print(mortality_percentage)
 summary(mortality_percentage)
 
 hist(mortality_percentage$percentage_mortality)
-
 ```
 Data follows a bimodal distribution.
 
+# Survivorship
 
-# Calculate Survivorship
+For now will not be using Survivorship in final deliverables but may be useful in future toxicology studies
+## Survivorship Function
 ```{r}
 calc_survivor_percent <- function(data) {
   
@@ -132,7 +186,7 @@ calc_survivor_percent <- function(data) {
   return(merged_data)
 }
 
-survival_percent <- calc_survivor_percent(LC50)
+survival_percent <- calc_survivor_percent(t_LC50)
 
 survival_percent$hpe <- as.character(survival_percent$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
 
@@ -142,36 +196,162 @@ summary(survival_percent)
 survival_percent$Ni.Conc. <- as.numeric(survival_percent$Ni.Conc.) # Did this so geom_smooth actually works
 ```
 
-
-
-
-# Exploratory percent mort graph
-
+# Mortality Graphs
+## Data frame for making graphs
 ```{r}
 mort_exp <- subset(mortality_percentage, hpe != 0)
+mort_exp$proportion_mortality <- mort_exp$percentage_mortality / 100
+```
 
-
-# Plot the data with smoothed curve
+### Mortality Linear Trendline
+```{r}
+# Plot the data linear
+setwd('..')
+png(filename = "output/mort_linear.png", width = 1200, height = 900)
 ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+  geom_point(size = 5, color = "black") +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, color = "black") +  # Error bars
+  geom_smooth(aes(ymin = ci_lower, ymax = ci_upper), method = "lm", se = TRUE, color = "darkblue", fill = "blue", alpha = 0.2, size = 2) +  # Smooth line with CI shading
+  geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50 
+  labs(x = "Nickel Concentration (mg/L)",
+       y = "Mortality (%)") +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), expand = c(0.01, 0.1)) +
+  scale_x_continuous(expand = c(0.01, 0.01)) +
+  facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe")), scales = "free") +  # Facet by hpe
+  theme_minimal() +
+  theme(
+    panel.grid.major.x = element_blank(),  # Remove major vertical gridlines
+    panel.grid.minor.x = element_line(color = "lightgrey", size = 0.5),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(), 
+    axis.text.y = element_text(size = 20, hjust = 1, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 20, angle = 90, vjust = 0.5, hjust = 1),  # Adjust text size and angle
+    axis.title = element_text(size = 30),
+    legend.text = element_text(size = 30),
+    legend.title = element_text(size = 30),
+    strip.text = element_text(size = 25),
+    strip.background = element_rect(fill = "grey", color = NA),  # Ensure background is visible
+    strip.placement = "outside",  # Place strip text outside the plot area
+    strip.placement.x = "bottom"  # Place x-axis title at the bottom
+  )
+dev.off()
+```
+
+### Mortality Logarithmic Trendline
+```{r}
+setwd('..')
+png(filename = "output/mort_percent_log.png", width = 1200, height = 600)
+
+ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+  geom_point(size = 5, color = "black") +
+  facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe"))) +
+  geom_smooth(method = "loess", se = TRUE, color = "darkblue", linewidth = 2) + 
+  xlim(0, 1500) +
+  geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50
+  labs(x = "Nickel Concentration mg/L",
+       y = "Mortality (%)") +
+  scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, by = 20), expand = c(0.01,0.1)) +
+  scale_x_log10(breaks = c(0.1, 1, 10, 100, 1000), labels = c("0.1", "1", "10", "100", "1000"), expand = c(0.1,0.01)) +
+  theme_test() +
+    theme(panel.grid.major.x = element_blank(),  # Remove major vertical gridlines
+        panel.grid.minor.x = element_line(color = "lightgrey", size = 0.5),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(), 
+        panel.background = element_rect(fill = "lightgrey"),
+        axis.text.y = element_text(size = 20, hjust = 1, margin = margin(r=20)),
+        axis.text.x = element_text(size = 20, angle = 90, vjust = 0.5, hjust= 1.2, margin = margin(t = 20)),
+        axis.title = element_text(size = 30),
+        legend.text = element_text(size = 30),
+        legend.title = element_text(size = 30),
+        strip.text = element_text(size = 25),
+        strip.background = element_rect(fill = "grey", color = NA),  # Ensure background is visible
+        strip.placement = "outside",  # Place strip text outside the plot area
+        strip.placement.x = "bottom")  # Place x-axis title at the bottom)
+
+dev.off()
+```
+
+## Extra mortality graphs not included in deliverables (sandbox area)
+```{r}
+setwd('..')
+png(filename = "output/mort_percent_nolog.png", width = 1200, height = 900)
+
+library(ggplot2)
+
+# Adjusted code with x-axis labels under each facet
+ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+  geom_point(size = 5, color = "black") +
+  facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe")), scales = "free") +
+  geom_smooth(method = "loess", se = TRUE, color = "darkblue", linewidth = 2) + 
+  geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50
+  labs(x = "Nickel Concentration mg/L",
+       y = "Mortality (%)") +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), expand = c(0.01, 0.1)) +
+  scale_x_continuous(expand = c(0.01, 0.01)) +
+  theme(panel.grid.major.x = element_blank(),  # Remove major vertical gridlines
+        panel.grid.minor.x = element_line(color = "lightgrey", size = 0.5),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(), 
+        axis.text.y = element_text(size = 20, hjust = 1, margin = margin(r = 20)),
+        axis.text.x = element_text(size = 20, angle = 90, vjust = 0.5, hjust = 1.2, margin = margin(t =20)),  # Adjust text size and angle
+        axis.title = element_text(size = 30),
+        legend.text = element_text(size = 30),
+        legend.title = element_text(size = 30),
+        strip.text = element_text(size = 25),
+        strip.background = element_rect(fill = "grey", color = NA),  # Ensure background is visible
+        strip.placement = "outside",  # Place strip text outside the plot area
+        strip.placement.x = "bottom")  # Place x-axis title at the bottom
+
+
+dev.off()
+```
+
+### Regression producing sigmoidal curve mortality trend
+
+```{r}
+library(ggplot2)
+
+# Plot the data with sigmoidal (logistic) curve
+ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
   geom_point(size = 2) +
   facet_wrap(~ hpe) +
-  geom_smooth(method = "loess", se = TRUE, span = 0.5, color = "black") + # the geom smooth method is currently incorrect, need to find out how to display what was found to be the LC50 using LC_logit from the ecotox package
-  geom_hline(yintercept = 50, linetype = "dotted", color = "red") +  # Add red dotted line at y = 50
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = TRUE, color = "black") +  # Use logistic regression
+  geom_hline(yintercept = 0.5, linetype = "dotted", color = "red") +  # Add horizontal red dotted line at y = 0.5 (50%)
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis back to percentage format
   labs(x = "Nickel Concentration mg/L",
-       y = "Mortality (%)")
+       y = "Mortality (%)") +
+  scale_x_log10()
 
-# Plot the data with smoothed curve
-ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
-  geom_point(size = 2) +
-  facet_wrap(~ hpe) +
-geom_line() +
-  geom_hline(yintercept = 50, linetype = "dotted", color = "red") +  # Add red dotted line at y = 50
-  labs(x = "Nickel Concentration mg/L",
-       y = "Mortality (%)")
+# Add vertical red dotted line at LC50
 
 ```
 
-# Exploratory survival graph
+
+```{r}
+library(ggplot2)
+
+# Convert percentage_mortality to proportion for logistic regression
+mort_exp$proportion_mortality <- mort_exp$percentage_mortality / 100
+
+# Plot the data with sigmoidal (logistic) curve
+p <- ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
+  geom_point(size = 2) +
+  facet_wrap(~ hpe) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = TRUE, color = "black") +  # Use logistic regression
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis back to percentage format
+  labs(x = "Nickel Concentration mg/L",
+       y = "Mortality (%)")
+
+# Calculate the x-value where the logistic curve intersects y = 50%
+model <- glm(proportion_mortality ~ Ni.Conc., data = mort_exp, family = "binomial")
+intercept_x <- (log(0.5 / (1 - 0.5)) - coef(model)[1]) / coef(model)[2]
+
+p 
+
+```
+
+
+# Exploratory Survivorship Graph
 ```{r}
 
 surv_exp <- subset(survival_percent, hpe != 0)
@@ -185,9 +365,8 @@ ggplot(surv_exp, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) +
 ```
 
 
-
-
-# Dose Response Models Readings
+# LC50 Estimation
+## Dose Response Models Readings
 
 We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and all cease blood movement at 1000 mg/L after 48 hours.
 
@@ -215,6 +394,7 @@ However, it may not capture non-linear relationships well, especially if the res
 
 Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model.
 
+## Example Ecotox Data
 ```{r, dummy ecotox data}
 #install.packages("ecotox")
 library(ecotox)
@@ -231,6 +411,7 @@ subset = c(month == "May"))
 print(m)
 
 lc_may <- subset(lamprey_tox, month %in% c("May"))
+
 p1 <- ggplot(data = lc_may[lc_may$nominal_dose != 0, ],
   aes(x = dose, y = (response / total))) +
   geom_point() +
@@ -242,35 +423,42 @@ p1 <- ggplot(data = lc_may[lc_may$nominal_dose != 0, ],
 
 ```
 
+## Use of LC50 dataframe for LC50 Estimations
+
+Note you may want to use the alternative data frame t_LC50 below to best represent what was observed and remove outliers.
+
 ```{r}
-head(LC50)
+head(t_LC50)
 
-LC50_24h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
-weights = Total,
-data = LC50[LC50$Ni.Conc. != 0, ],
-subset = c(hpe == "24"))
-
-print(LC50_24h)
+hist(t_LC50$Mortality)
 ```
 
 ```{r}
+#24 h
+LC50_24h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+weights = Total,
+data = t_LC50[LC50$Ni.Conc. != 0, ],
+subset = c(hpe == "24"))
+
+print(LC50_24h)
+
+# 48 h
 LC50_48h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
 weights = Total,
 data = LC50[LC50$Ni.Conc. != 0, ],
 subset = c(hpe == "48"))
 
 print(LC50_48h)
-```
 
-```{r}
+# 72 h
 LC50_72h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
 weights = Total,
 data = LC50[LC50$Ni.Conc. != 0, ],
 subset = c(hpe == "72"))
 
 print(LC50_72h)
-```
-```{r}
+
+#96 h
 LC50_96h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
 weights = Total,
 data = LC50[LC50$Ni.Conc. != 0, ],
@@ -279,12 +467,10 @@ print(LC50_96h)
 ```
 
 
-combine tibbles
+
+## Combine LC50 over time
 ```{r}
 library(dplyr)
-
-# Assuming LC50_24, LC50_48, ..., LC50_96 are tibbles/data frames containing LC50 results
-# Each tibble should have at least two columns: 'dose' and 'LC50'
 
 # Combine the LC50 results into one data frame
 combined_lc50 <- bind_rows(
@@ -294,13 +480,24 @@ combined_lc50 <- bind_rows(
   LC50_96h %>% mutate(time_point = 96)
 )
 
-# Now you have a single data frame 'combined_lc50' containing LC50 results for different time points
-# It should have columns: 'dose', 'LC50', and 'time_point'
 ```
 
 ```{r}
-# You can now plot the LC50 values over time
-#install.packages("ggrepel")
+
+ggplot(data = t_LC50[t_LC50$Ni.Conc. != 0, ],
+  aes(x = Ni.Conc., y = (Mortality / Total))) +
+  geom_point() +
+  geom_smooth(method = "glm",
+   method.args = list(family = binomial(link = "logit")),
+ aes(weight = Total), colour = "#FF0000", se = TRUE)
+
+```
+
+
+
+
+# LC50 Graph
+```{r}
 library(ggrepel)
 
 setwd('..')
@@ -318,8 +515,8 @@ ggplot(combined_lc50, aes(x = time_point, y = dose)) +
   labs(x = "Time (hours)", y = " Nickel Concentration (mg/L)") +
   ylim(0, 1000) + # Set y-axis limits
   theme(
-    axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
+    axis.text = element_text(size = 30),
+        axis.title = element_text(size =30),
         legend.text = element_text(size = 25),
         legend.title = element_text(size = 25)
   )
@@ -328,77 +525,287 @@ dev.off()
 ```
 
 
+# Health Graphs
 
-# Exploratory Blastogenic Arrest
-
-https://www.sciencedirect.com/science/article/pii/S0012160618303828
-
-above they refer to arrest and they interchangibly refer to torpor in 
-
-We may define effect concentration 50% by blastogenic arrest or blastogenic development inhibition in the animal as a chronic endpoint of nickel toxicity. 
-
-a. Need to account for rate of blastogenesis again. One step per day is normal and should be found in the control animal.
-
-b. In the 100 treatment for more than 3 days we see no change in blastogenic rate. The line will be flat over time.
-
-Exploratory health
+## R Square Calcs
 ```{r}
-ggplot(LC50, aes(x = hpe, y = simple_health)) + 
-  geom_point() +
+r_squared_values_mean <- mean_health_score %>%
+  group_by(Ni.Conc.) %>%
+  do({
+    model <- lm(mean_health ~ hpe, data = .)
+    r_squared <- summary(model)$r.squared
+    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+  }) %>%
+  ungroup()
+
+r_squared_values_raw <- t_LC50 %>%
+  group_by(Ni.Conc.) %>%
+  do({
+    model <- lm(Health ~ hpe, data = .)
+    r_squared <- summary(model)$r.squared
+    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+  }) %>%
+  ungroup()
+
+r_squared_values_raw_loess <- t_LC50_clean %>%
+  group_by(Ni.Conc.) %>%
+  do({
+    loess_fit <- loess(Health ~ hpe, data = ., span = 1)
+    predicted <- predict(loess_fit)
+    residuals <- .$Health - predicted
+    ss_total <- sum((.$Health - mean(.$Health))^2)
+    ss_residuals <- sum(residuals^2)
+    r_squared <- 1 - (ss_residuals / ss_total)
+    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+  }) %>%
+  ungroup()
+
+```
+
+## Multipanel plot health by time
+```{r}
+setwd('..')
+png(filename = "output/health_mean_se_raw.png", width = 2000, height = 1500)
+ggplot() + 
+  geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 5, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
+  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health), size = 9, color = "black") +  # Mean points
+  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se), width = 4) +  # Error bars
   facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
-  scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
-  ylim(0, 5) +
-  geom_smooth(method = "lm", se = TRUE) +  # Add linear regression line with shaded SE
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
+  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health), method = "loess", se = TRUE, fill= "lightsteelblue2", color = "lightsteelblue3", linewidth = 4, formula = (y ~ x), span = 1) +  # Add linear regression line with SE based on raw data
   labs(x = "Time (hours)", 
        y = "Health Score"
-       )
+       ) +
+  theme_test() +
+  theme(
+    strip.text = element_text(size = 55),  # Adjust the size of the facet wrap labels
+    axis.title = element_text(size = 60), # adjust size of title
+    axis.text.y = element_text(size = 55, hjust = 1, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 55, vjust = 3.5, hjust = 0.5, margin = margin(t=50))
+  ) +
+    geom_text(data = r_squared_values_raw_loess, aes(x = 48, y = 9, label = paste("R² =", round(r_squared, 2))), size = 16, color = "firebrick", vjust = -0.5, hjust = -0.4)
 
+dev.off()
 ```
 
 
 ```{r}
-y_breaks <- 1:7
-y_labels <- c("A1", "A2", "B1", "B2", "C1", "C2", "D")
 
-stage_mapping <- c(A1 = 1, A2 = 2, B1 = 3, B2 = 4, C1 = 5, C2 = 6, D = 7)
+setwd('..')
+png(filename = "output/health_mean.png", width = 2000, height = 1120)
+ggplot() + 
+  geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 0.1, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
+  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health), size = 9, color = "black") +  # Mean points
+  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se), width = 5, position = position_dodge(width = 0.5)) +  # Error bars
+  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
+  geom_smooth(data = mean_health_score, aes(x = hpe, y = mean_health), method = "lm", se = TRUE, color = "thistle", fill= "thistle" , linewidth = 5) +  # Add linear regression line with SE based on raw data
+  labs(x = "Time (hours)", 
+       y = "Average Health Score"
+       ) +
+  theme_test() +
+  theme(
+    strip.text = element_text(size = 40),  # Adjust the size of the facet wrap labels
+    axis.title = element_text(size = 50),
+    axis.text.y = element_text(size = 40, hjust = 1, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 40, vjust = 3, hjust = 0.5, margin = margin(t=20))
+  ) #+
+   # geom_text(data = r_squared_values_mean, aes(x = 48, y = 9, label = paste("R² =", round(r_squared, 2))), size = 8, color = "blue")
 
-LC50$Stage_Num <- stage_mapping[LC50$Stage]
+
+dev.off()
+
 ```
 
 
-
+## Plot the trendlines of declined health over time on one graph
 ```{r}
-ggplot(LC50, aes(x = hpe, y = Stage_Num)) + 
-  geom_point(alpha = 0.6, size = 2) +  # Adjust transparency and size of points
-  geom_line(aes(group = Tunicate.ID)) +  # Connect points with lines for each Tunicate.ID
-  scale_y_continuous(breaks = y_breaks, labels = y_labels) +  # Custom breaks and labels for y-axis
-  scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +  # Custom breaks for x-axis
-  labs(x = "hpe", y = "stage") +  # Axis labels
-  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L")))
+setwd('..')
+png(filename = "output/health_mean_one.png", width = 1400, height = 1120)
+
+# Define a custom labeller
+custom_labeller <- as_labeller(c("0" = "0", "0.1" = "0.1", "1" = "1", "10" = "10", "100" = "100", "1000" = "1000"))
+
+ggplot() + 
+  geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 0.1, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
+  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health, color = as.factor(Ni.Conc.)), size = 4) +  # Mean points with color by Ni.Conc.
+  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se, color = as.factor(Ni.Conc.)), width = 3) +  # Error bars with color by Ni.Conc.
+  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health, color = as.factor(Ni.Conc.), fill = as.factor(Ni.Conc.)), method = "lm", se = TRUE, linewidth = 2) +  # Add linear regression line with SE based on raw data
+  scale_color_brewer(palette = "PuOr", labels = custom_labeller) +  # Customize colors and labels for lines
+  scale_fill_brewer(palette = "PuOr", labels = custom_labeller) +  # Customize fill for SE
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
+  labs(x = "Time (hours)", 
+       y = "Health Score",
+       color = "Nickel (mg/L)",  # Legend title for lines
+       fill = "Nickel (mg/L)"  # Legend title for fill
+       ) +
+  theme_bw() +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 40),  # Adjust the legend title size
+    legend.text = element_text(size = 35),  # Adjust the legend text size
+    axis.title = element_text(size = 50),
+    axis.text.y = element_text(size = 40, hjust = 1, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 40, vjust = 3, hjust = 0.5, margin = margin(t=20))
+  )
+
+
+dev.off()
+
 ```
 
-
-# Test Data
-
+## Exploaratory raw health data over time
 ```{r}
-df <- LC50[LC50$Tunicate.ID == "DM012024_C01", ]
 
-stage_mapping <- c(A1 = 1, A2 = 2, B1 = 3, B2 = 4, C1 = 5, C2 = 6, D = 7)
-
-df$Stage_Num <- stage_mapping[df$Stage]
-
-summary(df)
+setwd('..')
+png(filename = "output/health_raw.png", width = 1400, height = 1120)
+ggplot(t_LC50, aes(x = hpe, y = Health)) + 
+  geom_point(size = 3, color = "black") +  # Adjust the size of the points
+  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), expand = c(0.0,0.0)) +
+  ylim(0, 10) +
+  geom_smooth(method = "lm", se = TRUE, color = "darkblue", linewidth = 5) +  # Add linear regression line with SE
+  labs(x = "Time (hours)", 
+       y = "Health Score"
+       ) +
+  theme_test() +
+  theme(
+    strip.text = element_text(size = 40),  # Adjust the size of the facet wrap labels
+    axis.title = element_text(size = 50),
+    axis.text.y = element_text(size = 40, hjust = 1.5, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 40, vjust = 3, hjust = 0.5, margin = margin(t=20))
+  )
+dev.off()
 ```
 
+
+## Health over increasing Ni Conc
 ```{r}
-y_breaks <- 1:7
-y_labels <- c("A1", "A2", "B1", "B2", "C1", "C2", "D")
+library(scales)
 
-ggplot(df, aes(x = hpe, y = Stage_Num, color = Ni.Conc.)) + 
-  geom_point(alpha = 0.6, size = 3) +  # Adjust transparency and size of points
-  geom_smooth(method = "loess", se = FALSE, span = 0.9)  +
-  scale_y_continuous(breaks = y_breaks, labels = y_labels) +  # Custom breaks and labels for y-axis
-    scale_x_continuous(breaks = c(0, 24, 48, 72, 96)) +
-  labs(x = "hpe", y = "stage")
+setwd('..')
+png(filename = "output/health_by_conc.png", width = 1400, height = 1100)
+ggplot() + 
+  geom_point(data = t2_LC50, aes(x = Ni.Conc.trans, y = Health), size = 0.01, color = "white", alpha = 0.5) +  # Raw data points for SE calculation
+  geom_point(data = mean_health_score_no0hpe, aes(x = Ni.Conc.trans, y = mean_health), size = 4, color = "black") +  # Mean points
+  geom_errorbar(data = mean_health_score_no0hpe, aes(x = Ni.Conc.trans, ymin = mean_health - se, ymax = mean_health + se), width = 0.2) +  # Error bars
+  facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe"))) +
+  scale_x_log10(breaks = c(0.01, 0.1, 1, 10, 100, 1000),
+                labels = c("0", "0.1", "1", "10", "100", "1000")) +  # Refined breaks and labels
+  scale_y_continuous(breaks = seq(0, 10, by = 2), expand = c(0.01, 0.01), limits = c(0, 10)) +
+  geom_smooth(data = t2_LC50, aes(x = Ni.Conc.trans, y = Health), method = "lm", se = TRUE, color = "darkblue", linewidth = 5) +  # Add linear regression line with SE based on raw data
+  labs(x = "Nickel Concentration (mg/L)", 
+       y = "Health Score"
+       ) +
+  theme_test() +
+  theme(
+    strip.text = element_text(size = 25),  # Adjust the size of the facet wrap labels
+    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
+    axis.title = element_text(size = 30),
+    axis.text.y = element_text(size = 20, hjust = 1.5, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 20, vjust = 3, hjust = 0.5, margin = margin(t = 20))
+  )
+dev.off()
+```
+
+
+
+# Statistical analysis of health decline differences
+If you look at the graphs, it appears that the decline in health over time in accordance with the independent variables may be significantly different. Need to sandbox a way to analyze differences in slopes among trend lines.
+
+## ANCOVA of linear models for health decline
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Fit linear models for each concentration
+lm_models <- mean_health_score %>% 
+  group_by(Ni.Conc.) %>% 
+  do(model = lm(mean_health ~ hpe, data = .))
+
+# Summarize the models
+model_summaries <- lm_models %>% 
+  summarize(
+    Ni.Conc. = unique(Ni.Conc.),
+    intercept = coef(model)[1],
+    slope = coef(model)[2],
+    p_value = summary(model)$coefficients[2, 4]
+  )
+
+# Print the summaries
+print(model_summaries)
+
+#ANCOVA
+# Combine all data and fit a single model with interaction to compare slopes or the rate in decline in health over time by concentration of nickel
+combined_model <- lm(mean_health ~ hpe * Ni.Conc., data = mean_health_score)
+summary(combined_model)
 
 ```
+## ANOVA?
+### ANOVA assumptions for raw health data
+```{r}
+summary(t_LC50)
+
+fact_LC50 <- t_LC50 %>%
+  mutate(hpe = as.factor(hpe)) %>%
+  mutate(Ni.Conc. = as.factor(Ni.Conc.))
+
+summary(fact_LC50)
+
+## Meeting the ANOVA assumptions
+leveneTest(Health ~ Ni.Conc.*hpe, data = fact_LC50)
+#p-value < 0.05, therefore equal-variances are NOT met, WOULD NEED TO TRANSFORM THE DATA
+
+shapiro.test(fact_LC50$Health)
+#DOES NOT meets assumption of normality, p value < 0.05
+
+hist(fact_LC50$Health)
+
+qqnorm(fact_LC50$Health)
+```
+
+### Transformation to try to make assumptions work for ANOVA raw health data
+```{r}
+# Transform Health variable
+t_LC50$Health_sqrt <- sqrt(t_LC50$Health)
+
+# Check histogram of transformed data
+hist(t_LC50$Health_sqrt, main = "Transformed Health (sqrt)", xlab = "Health")
+
+# Check normality of transformed data (optional)
+shapiro.test(t_LC50$Health_sqrt)
+
+# Perform Levene's test on transformed data
+leveneTest(Health_sqrt ~ Ni.Conc., data = t_LC50)
+
+# Run ANOVA on transformed data
+#anova_model <- aov(Health_sqrt ~ Ni.Conc., data = t_LC50)
+#summary(anova_model)
+
+```
+
+Still does not meet assumptions. Can't use ANOVA for health data.
+
+
+
+## Post Hoc Testing Simple Slopes
+This bit needs to be fixed and also further researched. As above there is evidently a signficant difference in the slopes by Ni.Conc.:hpe but at the moment can't say exactly which are different from which.
+```{r}
+library(emmeans)
+# Simple slopes analysis
+simple_slopes <- emmeans(combined_model, ~ hpe | Ni.Conc.)
+summary(simple_slopes)
+
+pairwise_comparisons <- pairs(simple_slopes)
+summary(pairwise_comparisons)
+
+```
+
+
+
+
