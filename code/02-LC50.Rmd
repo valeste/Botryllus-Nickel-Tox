@@ -16,6 +16,8 @@ library(ggplot2)
 library(RColorBrewer)
 library(ggpubr)
 library(ecotox)
+library(wesanderson)
+library(viridis)
 library(ggrepel)
 knitr::opts_chunk$set(echo = TRUE,
                       eval = FALSE)
@@ -196,6 +198,8 @@ summary(survival_percent)
 survival_percent$Ni.Conc. <- as.numeric(survival_percent$Ni.Conc.) # Did this so geom_smooth actually works
 ```
 
+
+
 # Mortality Graphs
 ## Data frame for making graphs
 ```{r}
@@ -211,7 +215,6 @@ png(filename = "output/mort_linear.png", width = 1200, height = 900)
 ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
   geom_point(size = 5, color = "black") +
   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, color = "black") +  # Error bars
-  geom_smooth(aes(ymin = ci_lower, ymax = ci_upper), method = "lm", se = TRUE, color = "darkblue", fill = "blue", alpha = 0.2, size = 2) +  # Smooth line with CI shading
   geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50 
   labs(x = "Nickel Concentration (mg/L)",
        y = "Mortality (%)") +
@@ -350,23 +353,120 @@ p
 
 ```
 
-
-# Exploratory Survivorship Graph
+# Survivor Graphs
+### subset data
 ```{r}
+surv_24_96 <-subset(survival_percent, hpe %in% c(24, 96))
+```
 
-surv_exp <- subset(survival_percent, hpe != 0)
+```{r}
+# Calculate the slope and intersection points for each hpe group
+fit_data <- surv_24_96 %>%
+  filter(Ni.Conc. %in% c(100, 1000)) %>%
+  group_by(hpe) %>%
+  summarize(
+    slope = (percentage_survivor[Ni.Conc. == 1000] - percentage_survivor[Ni.Conc. == 100]) / 
+            (1000 - 100),
+    intercept = percentage_survivor[Ni.Conc. == 100] - slope * 100,
+    x_intercept50 = (50 - intercept) / slope,
+    x_intercept90 = (90 - intercept) / slope,
+    equation = paste("y = ", round(slope, 2), "x + ", round(intercept, 2))
 
-ggplot(surv_exp, aes(x= Ni.Conc., y=percentage_survivor, color = hpe)) + 
+  )
+
+# Merge the intersection data with the original data
+surv_24_96 <- surv_24_96 %>%
+  left_join(fit_data, by = "hpe")
+```
+
+
+### survival 24 and 96 hpe
+```{r}
+setwd('..')
+png(filename = "output/survival_24_96.png", width = 1200, height = 700)
+
+ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe))) + 
   facet_wrap(~hpe) +
-  geom_point() +
-  geom_line() +
-      labs(x = "Nickel mg/L",
-       y = "Survival (%)")  
+  geom_point(size = 6) +
+  geom_line(aes(group = hpe), size = 2) +
+  scale_color_manual(values = c("thistle3", "mediumpurple4"), name = "hpe") +
+  labs(x = "Nickel Concentration mg/L",
+       y = "Survival (%)") +
+  scale_y_continuous(breaks = seq(0, 100, by = 10), expand = c(0.02, 0.02)) +
+  scale_x_continuous(expand = c(0.02, 0.02)) +
+  theme_test() +
+  theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "gray98"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "gray98", color = "gray98"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 30),
+    axis.title = element_text(size = 40),
+    axis.text.y = element_text(size = 30, hjust = 1.2, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20)),
+    legend.text = element_text(size = 30),
+    legend.title = element_text(size = 30),
+    strip.text = element_blank(),  # Remove strip text  
+    strip.background = element_blank(),
+    panel.spacing = unit(5, "lines")  # Increase spacing between panels
+
+  ) +
+  geom_label_repel(
+    data = fit_data,
+    aes(x = x_intercept90, y = 90, label = paste(round(x_intercept90), "mg/L")),
+    box.padding = unit(2, "lines"),
+    point.padding = unit(0.5, "lines"),
+    label.padding = unit(0.6, "lines"),
+    segment.size = 1,
+    size = 8,
+    color = "black",
+    nudge_x = 50,
+    nudge_y = 5,
+    show.legend = FALSE
+  ) +
+  geom_label_repel(
+    data = fit_data,
+    aes(x = x_intercept50, y = 50, label = paste(round(x_intercept50), "mg/L")),
+    box.padding = unit(2, "lines"),
+    label.padding = unit(0.6, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.size = 1,
+    size = 8,
+    color = "black",
+    nudge_x = 50,
+    nudge_y = 5,
+    show.legend = FALSE
+  ) +
+# 50% survival lines
+  geom_segment(data = fit_data, 
+               aes(x = min(surv_24_96$Ni.Conc.), 
+                   xend = x_intercept50, 
+                   y = 50, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1) +  
+  geom_segment(aes(x = x_intercept50, xend = x_intercept50, 
+                   y = 0, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1)  +
+  # 90% survivial lines
+ geom_segment(data = fit_data, aes(x = min(surv_24_96$Ni.Conc.), 
+                                   xend = x_intercept90, 
+                                   y = 90, yend = 90), 
+              linetype = "dashed", color = "royalblue1", linewidth = 1) +  
+  geom_segment(aes(x = x_intercept90, xend = x_intercept90, 
+                   y = 0, yend = 90), 
+               linetype = "dashed", color = "royalblue1", linewidth = 1) 
+
+dev.off()
 ```
 
 
 # LC50 Estimation
-## Dose Response Models Readings
+
+##Logit
+### Dose Response Models Readings
 
 We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and all cease blood movement at 1000 mg/L after 48 hours.
 
@@ -392,9 +492,9 @@ The linear model assumes a linear relationship between the dose and the response
 It may be appropriate when responses are continuous and show a linear trend across doses.
 However, it may not capture non-linear relationships well, especially if the response plateaus or changes direction.
 
-Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model.
+Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model. HOWEVER IT IS ALSO A REPEATED MEASURES EXP. SO YOU CAN'T USE A LOGIT. So instead use: Generalized Linear Mixed-Effects Model (GLMM) with a binomial family and logit link function 
 
-## Example Ecotox Data
+### Example Ecotox Data
 ```{r, dummy ecotox data}
 #install.packages("ecotox")
 library(ecotox)
@@ -423,7 +523,7 @@ p1 <- ggplot(data = lc_may[lc_may$nominal_dose != 0, ],
 
 ```
 
-## Use of LC50 dataframe for LC50 Estimations
+### Use of LC50 dataframe for LC50 Estimations with Logit
 
 Note you may want to use the alternative data frame t_LC50 below to best represent what was observed and remove outliers.
 
@@ -468,7 +568,7 @@ print(LC50_96h)
 
 
 
-## Combine LC50 over time
+### Combine LC50 over time
 ```{r}
 library(dplyr)
 
@@ -490,6 +590,42 @@ ggplot(data = t_LC50[t_LC50$Ni.Conc. != 0, ],
   geom_smooth(method = "glm",
    method.args = list(family = binomial(link = "logit")),
  aes(weight = Total), colour = "#FF0000", se = TRUE)
+
+```
+
+
+
+
+
+## GLMM: Generalized Linear Mixed-Effects Model with a binomial family and logit link function 
+
+```{r}
+install.packages("lme4")
+library(lme4)
+```
+
+```{r}
+glmm_model <- glmer(Mortality ~ hpe + Ni.Conc. + (1|Tunicate.ID),
+                    data = t_LC50,
+                    family = binomial(link = "logit"))
+
+# Print model summary
+summary(glmm_model)
+```
+```{r}
+t_LC50_high_dose <- subset(t_LC50, Ni.Conc. == 1000)
+table(t_LC50_high_dose$Mortality)
+
+library(lme4)
+
+# Fit a GLMM with just the high dose data
+glmm_model_high_dose <- glmer(Mortality ~ hpe + (1 | Tunicate.ID),
+                              data = t_LC50_high_dose,
+                              family = binomial(link = "logit"),
+                              control = glmerControl(optimizer = "bobyqa"))
+
+# Print model summary
+summary(glmm_model_high_dose)
 
 ```
 
@@ -583,8 +719,8 @@ ggplot() +
     axis.title = element_text(size = 60), # adjust size of title
     axis.text.y = element_text(size = 55, hjust = 1, margin = margin(r = 20)),
     axis.text.x = element_text(size = 55, vjust = 3.5, hjust = 0.5, margin = margin(t=50))
-  ) +
-    geom_text(data = r_squared_values_raw_loess, aes(x = 48, y = 9, label = paste("R² =", round(r_squared, 2))), size = 16, color = "firebrick", vjust = -0.5, hjust = -0.4)
+  ) #+
+   # geom_text(data = r_squared_values_raw_loess, aes(x = 48, y = 9, label = paste("R² =", round(r_squared, 2))), size = 16, color = "firebrick", vjust = -0.5, hjust = -0.4)
 
 dev.off()
 ```
