@@ -44,35 +44,94 @@ curl -L https://docs.google.com/spreadsheets/d/1vNxX2tBdEa0Ibyd4mFdru5sAZx0aipv3
 curl -L https://docs.google.com/spreadsheets/d/1mKhd95gn_tith8fJbYjX3jGyrO-Y4mWKCoCKdTVZFHY/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/BCA.csv
 ```
 
-## Metadata regarding tunicate ID information
+## Metadata
 
 Mostly it has the homogenization number and tunicate ID. We are gonna merge this with the other data frames.
 
 ```{r, engine='bash'}
-curl L- https://docs.google.com/spreadsheets/d/1B7fPL7gnJmboMZ8MI-Y5x7LaBw2vuwvBImnUAComaGU/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/metadata.csv
+curl -L https://docs.google.com/spreadsheets/d/1eDGpgtTB_yBolNCtSxVU2U_oajdm3Oi7guIREc7asRc/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/metadata.csv
+```
+## Blastogenic Data
+```{r, engine='bash'}
+curl -L https://docs.google.com/spreadsheets/d/1JtJO3EX06BYK4pYwZZ7b7ZCoTyZcAeuTRka_9kA-yPk/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/morph.csv
 ```
 
-## Additional data frames
-We will also need the morph data frame. Ne
 
-### Read in the data to your global environment
+# QAQC data
+
+Will need to exclude as they were not processed in assay:
+- DM042024_C02 (1 mg/L condition) declined in health.
+- DM022024_C05 (control) needs to be redone we have it for the BCA but not the SOD. Ran out of Xan. Ox.  
+
+Results in 8 replicates for 100 mg/L conc. and  7  for the 1 mg/L conc. + control.
+
+Look at the summaries of each data frame and make sure all the data looks right.
+
+Theoretically, we did 8 replicates per treatment and 2 time points. 
+
+Below we want to look at 0, 1, 100 mg/L treatments.
+
+There should be 48 total homogenates we are looking at. Note that the SOD assay has technical duplicates and the BCA assay had technical triplicates of each of those homogenates.
+
+Per treatment there should be:
+
+- 32 "observations" (entries/rows) for the SOD assay 
+
+- 48 "observations" for the BCA assay
+
+## SOD
 
 ```{r}
 setwd('..')
 sod <- read.csv(file = "data/SOD.csv")
+```
+
+```{r}
+sod$hom_num <- as.numeric(gsub("Hom (\\d+) .*", "\\1", sod$well_content)) # adding in new column to extract homogenate number based off what was written in the plate map
 
 #let's take a peak
 head(sod)
+
+summary(sod) ## Missing 4 entries for the 1 mg/L treatment. Find out which those are and why.
+```
+## BCA
+```{r}
+setwd('..')
+bca <- read.csv(file = "data/BCA.csv")
+```
+
+
+```{r}
+bca$hom_num <- as.numeric(gsub("Hom (\\d+) .*", "\\1", bca$well_content)) # adding in new column to extract homogenate number based off what was written in the plate map
+
+#let's take a peak
+head(bca)
+
+summary(bca) ## Missing 4 entries for the 1 mg/L treatment. Find out which those are and why.
 ```
 
 ```{r}
 setwd('..')
-bca <- read.csv(file = "data/BCA.csv")
-
-#another little peak
-head(bca)
+blast <- read.csv("data/LC50.csv")
 ```
 
+5 time points * 8 replicates
+
+Should be 40 entries per concentration (over 40 is ok)
+
+```{r}
+blast <- blast %>% 
+  mutate(hpe = as.factor(hpe)) %>%
+  mutate(Ni.Conc. = as.factor(Ni.Conc.))
+
+head(blast)
+summary(blast)
+```
+
+```{r}
+setwd('..')
+metadata <- read.csv("data/metadata.csv")
+```
 
 In the BCA data frame, we are missing the hpe associated with the each sample. We can add this on to a new data frame that also combines it with the SOD data after we take the averages and standard errors of the technical replicates of the BCA assay.
 
@@ -82,47 +141,41 @@ Note that as of July 3, 2024, the data set for the 10 mg/L is incomplete in this
 
 # Data Munging!
 
-## Filter Data
-
-Clean up SOD data
-```{r}
-df_clean_sod <- sod %>%
-  filter(!is.na(sod_calc)) %>% # remove any rows with NA
-  filter(treatment != 10) # remove the 10 mg/L treatment since the reps have not all been processed yet
-```
-
-Clean up BCA data
-```{r}
-df_clean_bca <- bca %>%
-  filter(!is.na(protein_conc.mg.mL)) %>% # remove any rows with NA
-  filter(treatment != 10) # remove the 10 mg/L treatment since the reps have not all been processed yet
-```
-
 ## Average assays' technical replicates
 
 Get the mean and standard error of the technical replicates for SOD:
 
 ```{r}
-df_avg_sod <- df_clean_sod %>%
-  group_by(hom_num, treatment, hpe) %>%
+df_avg_sod <- sod %>%
+  group_by(hom_num) %>%
   summarize(
     sod_avg = mean(sod_calc, na.rm = TRUE),
     sod_se = sd(sod_calc, na.rm = TRUE) / sqrt(n())
-  )
+  ) %>%
+  mutate(hom_num = as.factor(hom_num))
+
+summary(df_avg_sod)
 ```
 
 ```{r}
-df_avg_bca <- df_clean_bca %>%
-  group_by(hom_num, treatment) %>%
+df_avg_bca <- bca %>%
+  group_by(hom_num) %>%
   summarize(
     bca_avg = mean(protein_conc.mg.mL, na.rm = TRUE),
     bca_se = sd(protein_conc.mg.mL, na.rm = TRUE) / sqrt(n())
-  )
+  ) %>%
+  mutate(hom_num = as.factor(hom_num))
+
+summary(df_avg_bca) # note that we have an extra entry here for homogenate 37 that has yet to be processed for SOD assay
 ```
 
 ```{r}
-combo <- inner_join(df_avg_sod, df_avg_bca, by = c("hom_num", "treatment"))
-head(combo)
+metadata <- metadata %>%
+  select(hom_num, Tunicate.ID, date, hpe, Ni.Conc., true_rep, rep_exp) %>%
+  mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
+  mutate(hpe = as.factor(hpe)) %>%
+  mutate(hom_num = as.factor(hom_num))
+summary(metadata)
 ```
 
 ::: {.callout-note}
@@ -130,17 +183,96 @@ The column sod_avg is in activity units/mL and the column bca_avg is in mg/mL.
 :::
 
 ```{r}
-combo <- combo %>%
-  mutate(sod_u_mg = sod_avg / bca_avg)
+combo <- inner_join(metadata, df_avg_bca, by = c("hom_num"))
+combo <- inner_join(combo, df_avg_sod, by = c("hom_num"))
+combo <- inner_join(combo, blast, by = c("Tunicate.ID", "Ni.Conc.", "hpe"))
+summary(combo)
 ```
+
+```{r}
+combo <- combo %>%
+  mutate(sod_u_mg = sod_avg / bca_avg) %>%
+  filter(!is.na(sod_u_mg)) %>%
+  filter(Ni.Conc. != 10) 
+summary(combo)
+```
+```{r}
+combo <- combo %>%
+  mutate(simple_stage = case_when(
+    Stage %in% c("A1", "A2") ~ "A",
+    Stage %in% c("B1", "B2") ~ "B",
+    Stage %in% c("C1", "C2") ~ "C",
+    Stage == "D" ~ "D",
+    TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
+  )) %>%
+    mutate(simple_stage = as.factor(simple_stage))
+
+summary(combo)
+```
+
+```{r}
+combo24 <- combo %>%
+  filter(hpe == 24)
+
+combo96 <- combo %>%
+  filter(hpe == 96)
+
+summary(combo24)
+summary(combo96)
+```
+
+
 
 
 # Exploratory Plots
 
+
+```{r}
+
+ggplot(combo24, aes(x = Ni.Conc., y = sod_u_mg, fill = hpe)) +
+  geom_point() +
+  geom_violin(trim = FALSE) +
+  facet_wrap(~ simple_stage) +
+  labs(title = "Violin Plot of SOD Activity (u/mL) at 24 hpe by Treatment and stage",
+       fill = "HPE",
+       x = "Treatment",
+       y = "SOD Activity") 
+
+```
+
+```{r}
+
+ggplot(combo96, aes(x = Ni.Conc., y = sod_u_mg, fill = hpe)) +
+  geom_point() +
+  geom_violin(trim = FALSE) +
+  facet_wrap(~ simple_stage) +
+  labs(title = "Violin Plot of SOD Activity (u/mL) by Treatment and stage",
+       fill = "HPE",
+       x = "Treatment",
+       y = "SOD Activity") 
+```
+
+```{r}
+
+ggplot(combo, aes(x = Ni.Conc., y = sod_u_mg, fill = hpe)) +
+  geom_point() +
+  geom_violin(trim = FALSE) +
+  facet_wrap(~ simple_stage) +
+  labs(title = "Violin Plot of SOD Activity (u/mL) by Treatment and hpe and stage",
+       fill = "HPE",
+       x = "Treatment",
+       y = "SOD Activity") 
+```
+
+
+
+"Oidative stress does change with the blastogenic stage of Botryllus schlosseri naturally. Botryllus schlosseri, a colonial ascidian, undergoes a cyclic process called blastogenesis, which includes different stages: bud formation, growth, and take-over (zooid death and replacement by a new generation). During these stages, physiological and biochemical changes occur, including variations in oxidative stress levels."
+
+
 Note that the plot below is the unormalized data. A BCA was run on the samples as well to quantify total protein content.
 ```{r, eval=TRUE}
-
-ggplot(combo, aes(x = factor(treatment), y = sod_avg, fill = factor(treatment))) +
+ggplot(combo, aes(x = Ni.Conc., y = sod_avg, fill = Ni.Conc.)) +
+  geom_point() +
   geom_violin(trim = FALSE) +
   facet_wrap(~ hpe, scales = "free_y") +
   labs(title = "Violin Plot of SOD Activity (u/mL) by Treatment and HPE",
@@ -149,19 +281,94 @@ ggplot(combo, aes(x = factor(treatment), y = sod_avg, fill = factor(treatment)))
        y = "SOD Activity") 
 ```
 
-SOD1 activity normalized to the protein content per sample:
+## SOD1 activity normalized to the protein content per sample:
 ```{r, eval=TRUE}
 
-ggplot(combo, aes(x = factor(treatment), y = sod_u_mg, fill = factor(treatment))) +
+ggplot(combo, aes(x = Ni.Conc., y = sod_u_mg, fill = hpe)) +
+  geom_violin(trim = FALSE)  +
+  labs(title = "Violin Plot of SOD Activity (u/mg) by Nickel and hpe",
+       x = "Nickel Concnetration mg/L",
+       y = "SOD Activity") 
+```
+
+
+
+```{r}
+library(ggstatsplot)
+setwd('..')
+png(filename = "output/violin_sod_krusk.png", width = 1800, height = 800)
+grouped_ggbetweenstats(
+  data = combo,
+  x = Ni.Conc.,
+  y = sod_u_mg,
+  grouping.var = hpe,
+  type = "nonparametric",
+  outlier.tagging = TRUE,
+  xlab = "Nickel Concentration mg/L",
+  ylab = "SOD1 U/mg",
+  pairwise.display = "significant",
+  results.subtitle = FALSE,
+  digits = 2L,
+  package = "wesanderson", ## package from which color palette is to be taken
+  palette = "Moonrise3",  
+  point.args = list(
+    alpha = 1,
+    size = 10),
+  centrality.point.args = list(size = 10, color = "orangered3"),
+  centrality.label.args = list(
+    alpha = 0,
+    size  = 9, 
+    nudge_x = 0.5, 
+    nudge_y = 9),
+  ggplot.component = list (
+    ggplot2::scale_y_continuous(
+    breaks = seq(0, 40, by = 10),
+    limits = (c(0, 40))),
+    theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "#b4aea9"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "gray96", color = "gray96"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
+    axis.title = element_text(size = 40),
+    axis.text.y = element_text(size = 30, hjust = 1.5, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20))
+  )
+ ) 
+) 
+dev.off()
+
+```
+
+
+
+
+```{r}
+library(ggstatsplot)
+library(ggplot2)
+
+grouped_ggbetweenstats(
+  data = combo24,
+  x = Ni.Conc.,
+  y = sod_u_mg,
+  grouping.var = simple_stage
+) 
+```
+
+
+```{r}
+ggplot(combo, aes(x = Ni.Conc., y = sod_u_mg, fill = Ni.Conc.)) +
   geom_violin(trim = FALSE) +
-  facet_wrap(~ hpe, scales = "free_y") +
+  facet_wrap(~ hpe) +
   labs(title = "Violin Plot of SOD Activity (u/mg) by Treatment and HPE",
        fill = "Nickel Concentration",
        x = "Treatment",
        y = "SOD Activity") 
 ```
-
-
 
 # Statistical Analysis
 
@@ -169,11 +376,25 @@ We will run a two-way ANOVA on the data exploring sod1 activity units/mg of prot
 
 ```{r}
 # Perform ANOVA
-anova_result <- aov(sod_u_mg ~ hpe * treatment, data = combo)
+anova_result <- aov(sod_u_mg ~ hpe * Ni.Conc., data = combo)
 
 # Summarize ANOVA results
 summary(anova_result)
 ```
+
+## ANOVA assumptions
+
+```{r}
+# Check histogram of transformed data
+hist(combo$sod_u_mg, main = "Distribution", xlab = "SOD U/mg")
+
+# Check normality of data (optional)
+shapiro.test(combo$sod_u_mg)
+
+# Perform Levene's test on data
+leveneTest(sod_u_mg ~ Ni.Conc., data = combo)
+```
+
 ## ANOVA Conclusions
 
 SOD1 activity does not differ across nickel concentration treatment groups or even the control at either the 24 or 96 hours post exposure mark.
@@ -187,7 +408,7 @@ Currently this will only work below if the groups are of equal sample size. Beca
 
 ```{r}
 library(pwr)
-anova_result <- aov(sod_u_mg ~ hpe * treatment, data = combo)
+anova_result <- aov(sod_u_mg ~ hpe * Ni.Conc., data = combo)
 summary_result <- summary(anova_result)
 
 # Extract the sum of squares
@@ -203,7 +424,7 @@ effect_size_f <- sqrt(eta_squared / (1 - eta_squared))
 
 ```{r}
 # Number of groups in your ANOVA (e.g., hpe * treatment)
-num_groups <- length(unique(combo$hpe)) * length(unique(combo$treatment))
+num_groups <- length(unique(combo$hpe)) * length(unique(combo$Ni.Conc.))
 
 # Significance level (commonly set to 0.05)
 alpha <- 0.05
@@ -220,7 +441,7 @@ print(power_analysis)
 ```
 Note that n = 7.5 is in relation to the unequal sample sizes per group which is in relation to the missing control sample, homogenate 37.
 
-Power (0.1238005): The power of 0.1238 indicates that this study has a low probability (approximately 12.38%) of detecting the true effect (f = 0.1920704) under the current conditions (sample sizes, effect size, and significance level).
+Power (0.1781299): The power of 0.1238 indicates that this study has a low probability (approximately 17.8%) of detecting the true effect (f = 0.2437383) under the current conditions (sample sizes, effect size, and significance level).
 
 Considerations: To increase power, we may need to consider increasing the sample size per group, using more sensitive measures, or adjusting your study design to reduce variability.
 
