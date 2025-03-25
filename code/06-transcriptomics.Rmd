@@ -159,3 +159,26 @@ awk '/^>g4208[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} EN
 ```{r, engine= 'bash'}
 awk '/^>g5661[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
 ```
+
+```{r, engine= 'bash'}
+awk '/^>g6611[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g7259[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g7613[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g8170[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g9341[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g9597[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
