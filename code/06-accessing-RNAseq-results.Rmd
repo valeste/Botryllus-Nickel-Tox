@@ -60,6 +60,12 @@ Take a look at the fasta file for the transcriptome provided.
 cd ../data
 head -n 20 Botryllus_tozio_genes.fasta
 ```
+```{r, engine='bash'}
+cd ../data
+echo "How many sequences are there?"
+grep -c ">" Botryllus_tozio_genes.fasta
+```
+
 
 The next step will involve making a new fasta file with just those sequences in the gene list
 
