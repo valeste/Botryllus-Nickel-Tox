@@ -1,0 +1,166 @@
+---
+title: "Extracting Transcript Sequences"
+output: html_document
+date: "2025-03-26"
+---
+# Extract Transcript Sequences and make a new FASTA file
+
+```{r, engine= 'bash'}
+#!/bin/bash
+
+# File containing the list of gene identifiers
+GENE_LIST="../data/gene_ids.txt"  # Ensure this file has one gene identifier per line (e.g., g10908, g11811, etc.)
+OUTPUT_FASTA="../data/noname_sequences.fasta"
+INPUT_FASTA="../data/Botryllus_tozio_genes.fasta"
+
+# Clear the output file if it exists
+> $OUTPUT_FASTA
+
+# Loop through each gene ID in the list and extract its sequence
+while IFS= read -r gene_id; do
+    # Debugging output to check if the gene ID is being read correctly
+    echo "Processing gene: $gene_id"
+
+    # Extract the gene sequence for each gene_id and append it to the output FASTA file
+    awk '/^>$gene_id[^0-9]/{flag=1; print; next} /^>/{flag=0} flag' $INPUT_FASTA >> $OUTPUT_FASTA
+    
+    # Check if the sequence was successfully extracted
+    if [ $? -eq 0 ]; then
+        echo "Extracted sequence for: $gene_id"
+    else
+        echo "Failed to extract sequence for: $gene_id"
+    fi
+done < "$GENE_LIST"
+
+echo "Extraction complete. Sequences saved in $OUTPUT_FASTA."
+
+
+```
+
+```{r, engine='bash'}
+cd ../data
+tail -n 50 noname_sequences.fasta
+```
+
+# Manually extracting each sequence
+We will now pull the transcript sequences of the genes that are unannotated. Below you can use what is spit out in the console copy and paste them into blastx to find associated proteins. You can then update the file noname.csv by hand.
+```{r, engine='bash'}
+
+awk '/^>g1294[^0-9]/{flag=1; print; next} /^>/{flag=0} flag' ../data/Botryllus_tozio_genes.fasta
+
+```
+
+
+```{r, engine='bash'}
+
+awk '/^>g1294/{flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+
+```
+
+```{r, engine='bash'}
+
+awk '/^>g6611/{flag=1; print; next} /^>/{flag=0} flag' ../data/Botryllus_tozio_genes.fasta
+
+```
+
+```{r, engine='bash'}
+
+awk '/^>g1196[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+
+```
+
+```{r, engine='bash'}
+awk '/^>g12050[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g12111[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+
+```
+
+```{r, engine= 'bash'}
+awk '/^>g12775[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g1294[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g12982[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g13014[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g14195[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g14703[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g14965[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g15728[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g15986[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g16191[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g16471[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g1703[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g1744[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g2472[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g2473[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g4208[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g5661[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g6611[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+```{r, engine= 'bash'}
+awk '/^>g7259[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g7613[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g8170[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g9341[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
+
+```{r, engine= 'bash'}
+awk '/^>g9597[^0-9]/ {flag=1; print; next} /^>/{flag=0} flag{printf "%s", $0} END {print ""}' ../data/Botryllus_tozio_genes.fasta
+```
