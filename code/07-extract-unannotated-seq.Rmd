@@ -5,68 +5,16 @@ date: "2025-03-26"
 ---
 # Extract Transcript Sequences and make a new FASTA file
 
+Make a new fasta file that contains 
 ```{r, engine= 'bash'}
-#!/bin/bash
 
-# Input FASTA file containing the full transcriptome
-INPUT_FASTA="/home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/Botryllus_tozio_genes.fasta"
+# Use seqtk to extract sequences that correspond to the gene IDs in transcript_ids.txt
+/home/shared/seqtk-1.4/seqtk subseq ../data/Botryllus_tozio_genes.fasta ../data/transcript_ids.txt > ../data/noname.fasta
 
-# Gene ID list file
-GENE_IDS="/home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/gene_ids.txt"  # List of gene IDs you want to extract
-
-# Output FASTA file for the extracted sequences
-OUTPUT_FASTA="/home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/noname_sequences.fasta"  # Output file
-
-# Extract ids and gene ids into a tsv file:
-perl -lne '@f = /^>(\S+)\s+(\S+)/ and print join "\t", @f;' $INPUT_FASTA > ids_gene_ids.tsv
-
-# Select ids that correspond to the desired gene ids (from gene_ids.txt):
-grep -f $GENE_IDS ids_gene_ids.tsv | cut -f1 > ids.selected.txt
-
-# Use seqkit to extract the sequences that correspond to the gene ids:
-seqkit subseq $INPUT_FASTA ids.selected.txt > $OUTPUT_FASTA
-
-echo "Extraction complete. Sequences saved in $OUTPUT_FASTA."
-
-# Optionally, view the output file:
-cat $OUTPUT_FASTA
-
+cat ../data/noname.fasta
 ```
 
-```{r, engine= 'bash'}
-#!/bin/bash
-
-# Input FASTA file containing the full transcriptome
-INPUT_FASTA="../data/Botryllus_tozio_genes.fasta"  # Update to your input FASTA file path
-
-# Gene ID list file
-GENE_IDS="../data/gene_ids.txt"  # List of gene IDs you want to extract (one per line)
-
-
-
-# Output FASTA file for the extracted sequences
-OUTPUT_FASTA="../data/noname_sequences.fasta"  # Output file
-
-# Clear the output file if it exists
-> $OUTPUT_FASTA
-
-# Loop through each gene ID in the list and extract its sequence
-while IFS= read -r gene; do
-    # Use awk to extract sequences for each gene_id
-    awk -v gene="$gene" '/^>'gene'[^0-9]/{flag=1; print; next} /^>/{flag=0} flag' $INPUT_FASTA >> $OUTPUT_FASTA
-    echo "Extracted sequence for: $gene"
-done < "$GENE_IDS"
-
-echo "Extraction complete. Sequences saved in $OUTPUT_FASTA."
-
-awk '/^>g10908/{flag=1; print; next} /^>/{flag=0} flag' $INPUT_FASTA
-
-
-```
-
-
-
-
+Or you can copy and paste the sequences into ncbi blastx.
 
 # Manually extracting each sequence
 We will now pull the transcript sequences of the genes that are unannotated. Below you can use what is spit out in the console copy and paste them into blastx to find associated proteins. You can then update the file noname.csv by hand.
