@@ -4,38 +4,43 @@ output: html_document
 date: "2025-03-26"
 ---
 
-# Add Gene Symbols to by accession numbers
+```{r, engine='bash'}
+cd ../data
+curl -O https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz
+mv uniprot_sprot.fasta.gz uniprot_sprot_r2025_03.fasta.gz
+gunzip -k uniprot_sprot_r2025_03.fasta.gz
+ls ../data
+```
 
-```{r}
-# Load the necessary libraries
-library(httr)
-library(xml2)
-
-# Load the CSV file containing your data
-df <- read.csv("../data/noname.csv")
-
-# Function to fetch gene symbol using UniProt
-get_gene_symbol <- function(accession) {
-  # Query UniProt for the given accession number
-  url <- paste0("https://www.uniprot.org/uniprot/", accession, ".xml")
-  response <- GET(url)
-  
-  # If the response is successful
-  if (status_code(response) == 200) {
-    xml <- content(response, "text")
-    # Parse the XML to extract the gene symbol
-    gene_symbol <- xml_text(xml_find_first(read_xml(xml), ".//gene"))
-    return(gene_symbol)
-  }
-  return(NA)  # Return NA if not found
-}
-
-# Apply the function to the 'Acc. Len' column (adjust the column name if necessary)
-df$Gene.Symbol <- sapply(df$accession, get_gene_symbol)
-
-# Save the annotated CSV with gene symbols
-write.csv(df, "annotated_noname.csv", row.names = FALSE)
-
-print("Gene symbols annotation complete.")
+```{r, engine='bash'}
+/home/shared/ncbi-blast-2.11.0+/bin/makeblastdb \
+-in /home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/uniprot_sprot_r2025_03.fasta \
+-dbtype prot \
+-out /home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/output/blastdb/uniprot_sprot_r2025_03
 
 ```
+
+```{r, engine='bash'}
+head -n 20 ../data/noname.fasta  # View the first 20 lines of the file to ensure it's correct
+echo "How many sequences are there?"
+grep -c ">" ../data/noname.fasta  # Count the number of sequences in the FASTA file
+```
+```{r, engine='bash'}
+/home/shared/ncbi-blast-2.11.0+/bin/blastx \
+-query ../data/noname.fasta \
+-db ../output/blastdb/uniprot_sprot_r2025_03 \
+-out ../output/Bsc-uniprot_blastx.tab \
+-evalue 1E-20 \
+-num_threads 20 \
+-max_target_seqs 1 \
+-outfmt 6
+
+```
+
+
+```{r, engine='bash'}
+head -2 ../output/Bsc-uniprot_blastx.tab  # View the first two lines of the BLAST output
+wc -l ../output/Bsc-uniprot_blastx.tab   # Count the number of results
+
+```
+
