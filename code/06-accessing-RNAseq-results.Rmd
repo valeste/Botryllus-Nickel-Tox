@@ -72,7 +72,59 @@ The next step will involve making a new fasta file with just those sequences in 
 
 ```{r, engine='bash'}
 # Extract the 'Gene' column while skipping the header
-awk -F, 'NR > 1 {print $2}' ../data/noname.csv > ../data/gene_ids.txt
+awk -F 'NR > 1 {print $2}' ../data/noname.csv > ../data/gene_ids.txt
+```
+
+
+Now we need a transcript id list. this is going to be important for when we try to extract each sequence of each transcript from the fasta file and make a new one using seqtk tools.
+```{r, engine='bash'}
+#!/bin/bash
+
+# Input FASTA file containing the full transcriptome
+INPUT_FASTA="/home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/Botryllus_tozio_genes.fasta"
+
+# Output file for the new list of transcript IDs (with suffixes like .t1, .t2, etc.)
+TRANSCRIPT_IDS="/home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/transcript_ids.txt"
+
+# Create (or clear) the transcript_ids.txt file
+> $TRANSCRIPT_IDS
+
+# Directly execute multiple awk commands for each gene and append to the output file
+awk '/^>g10908[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g11811[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g11813[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g1196[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g12050[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g12111[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g12775[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g1294[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g12982[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g13014[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g14195[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g14703[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g14965[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g15728[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g15986[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g16191[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g16471[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g1703[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g1744[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g2472[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g2473[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g4208[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g5661[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g6611[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g7259[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g7613[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g8170[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g9341[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+awk '/^>g9597[^0-9]/{print substr($1, 2)}' $INPUT_FASTA >> $TRANSCRIPT_IDS
+
+echo "Transcript IDs for all genes extracted and saved to $TRANSCRIPT_IDS"
+
+# Optionally, view the transcript IDs to confirm they were extracted
+cat $TRANSCRIPT_IDS
+
 ```
 
 
