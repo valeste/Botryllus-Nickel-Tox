@@ -57,9 +57,13 @@ We will need to use this file to make a gene list to extract all of the sequence
 
 Take a look at the fasta file for the transcriptome provided. 
 ```{r, engine='bash'}
+
+pwd
 cd ../data
 head -n 20 Botryllus_tozio_genes.fasta
 ```
+
+
 ```{r, engine='bash'}
 cd ../data
 echo "How many sequences are there?"
