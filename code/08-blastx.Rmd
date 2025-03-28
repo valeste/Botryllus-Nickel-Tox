@@ -44,3 +44,28 @@ wc -l ../output/Bsc-uniprot_blastx.tab   # Count the number of results
 
 ```
 
+```{r, engine='bash'}
+tr '|' '\t' < ../output/Bsc-uniprot_blastx.tab | head -2
+
+# replace the "|" with "\t" in the file "Ab_4-uniprot_blastx.tab"
+# and save the output to the file "Ab_4-uniprot_blastx_sep.tab"
+
+tr '|' '\t' < ../output/Bsc-uniprot_blastx.tab \
+> ../output/Bsc-uniprot_blastx_sep.tab
+```
+
+```{r}
+bltabl <- read.csv("../output/Bsc-uniprot_blastx_sep.tab", sep = '\t', header = FALSE)
+```
+
+```{r}
+# Reading the Uniprot table
+spgo <- read.csv("../data/uniprot_sprot_r2025_03_cleaned.tab", sep = "\t", header = TRUE)
+
+# Merge the BLAST results with the Uniprot annotations
+annotated_blast <- left_join(bltabl, spgo, by = c("V3" = "Entry")) %>%
+   select(V1, V3, V4, V13, Protein.names, Organism) %>%
+   write_delim("../output/blast_annot_go.tab", delim = '\t')
+
+```
+
