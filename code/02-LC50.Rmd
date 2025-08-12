@@ -216,7 +216,7 @@ ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) +
   geom_point(size = 5, color = "black") +
   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, color = "black") +  # Error bars
   geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50 
-  labs(x = "Nickel Concentration (mg/L)",
+  labs(x = "Nominal Nickel (II) Chloride Concentration (mg/L)",
        y = "Mortality (%)") +
   scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), expand = c(0.01, 0.1)) +
   scale_x_continuous(expand = c(0.01, 0.01)) +
@@ -383,14 +383,14 @@ surv_24_96 <- surv_24_96 %>%
 ### survival 24 and 96 hpe
 ```{r}
 setwd('..')
-png(filename = "output/survival_24_96.png", width = 1200, height = 700)
+png(filename = "output/survival_24_96_2025.png", width = 1200, height = 700)
 
 ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe))) + 
   facet_wrap(~hpe) +
   geom_point(size = 6) +
   geom_line(aes(group = hpe), size = 2) +
   scale_color_manual(values = c("thistle3", "mediumpurple4"), name = "hpe") +
-  labs(x = "Nickel Concentration mg/L",
+  labs(x = "Nominal Nickel (II) Chloride Concentration (mg/L)",
        y = "Survival (%)") +
   scale_y_continuous(breaks = seq(0, 100, by = 10), expand = c(0.02, 0.02)) +
   scale_x_continuous(expand = c(0.02, 0.02)) +
@@ -636,8 +636,8 @@ summary(glmm_model_high_dose)
 ```{r}
 library(ggrepel)
 
-setwd('..')
-png(filename = "output/LC50_overtime.png",  width = 1000, height = 500)
+#setwd('..')
+#png(filename = "output/LC50_overtime.png",  width = 1000, height = 500)
 
 # You can now plot the LC50 values over time
 ggplot(combined_lc50, aes(x = time_point, y = dose)) +
@@ -657,7 +657,7 @@ ggplot(combined_lc50, aes(x = time_point, y = dose)) +
         legend.title = element_text(size = 25)
   )
 
-dev.off()
+#dev.off()
 ```
 
 
