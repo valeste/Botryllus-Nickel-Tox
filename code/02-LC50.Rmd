@@ -6,6 +6,7 @@ output: html_document
 ---
 
 # Setup
+
 ```{r, eval =TRUE}
 library(knitr)
 library(tidyverse)
@@ -43,24 +44,28 @@ LC50 <- read.csv(file = "data/LC50.csv")
 # Cleaning up Data
 
 ## Add simplified scoring columbs and convert dates
+
 Convert Datees
+
 ```{r, eval=TRUE}
-LC50$Date <- mdy(LC50$Date) #convert the Date column from characters to true Date
+LC50$date <- mdy(LC50$date) #convert the Date column from characters to true Date
 ```
 
 Simple Stage column added:
+
 ```{r}
 LC50 <- LC50 %>%
-  mutate(simple_Stage = case_when(
-    Stage %in% c("A1", "A2") ~ "A",
-    Stage %in% c("B1", "B2") ~ "B",
-    Stage %in% c("C1", "C2") ~ "C",
-    Stage == "D" ~ "D",
+  mutate(simple_stage = case_when(
+    stage %in% c("A1", "A2") ~ "A",
+    stage %in% c("B1", "B2") ~ "B",
+    stage %in% c("C1", "C2") ~ "C",
+    stage == "D" ~ "D",
     TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
   ))
 ```
 
-Simple health scoring column addd
+Simple health scoring column added
+
 ```{r}
 # Create new simplified health scoring
 LC50 <- LC50 %>%
@@ -77,8 +82,8 @@ LC50 <- LC50 %>%
 summary(LC50)
 ```
 
-
 ## Remove outlier individuals
+
 Here we will remove the individuals that are insuitable for our analyses acros the SOD and LC50 assays.
 
 Will need to exclude two individuals from study. DM032024_C03 (0.1 mg/L condition) and DM042024_C02 (1 mg/L condition). Results in 8 replicates for all treatments except 7 only for the 1 mg/L condition.
@@ -96,16 +101,18 @@ t_LC50 <- LC50[!is.na(LC50$true_rep), ]
 ## Adjust dependent variables into factors
 
 dont use for now.....
+
 ```{r}
 #t_LC50 <-  t_LC50 %>% 
-  #mutate(Ni.Conc. = as.factor(Ni.Conc.)) %>%
+  #mutate(NiCl2.Nom.Conc. = as.factor(NiCl2.Nom.Conc.)) %>%
  # mutate(hpe = as.factor(hpe))
 ```
 
 ## Produce some data frames for plotting mean health scores per independent variable
+
 ```{r}
 mean_health_score <- t_LC50 %>%
-  group_by(hpe, Ni.Conc.) %>%
+  group_by(hpe, NiCl2.Nom.Conc.) %>%
   summarise(
     mean_health = round(mean(Health, na.rm = TRUE)),
     se = sd(Health, na.rm = TRUE) / sqrt(n()),
@@ -117,17 +124,18 @@ t_LC50_clean <- t_LC50 %>%
 ```
 
 ## Produce data frames to plot log x-axis health graphs
-Below we produce a couple of data frames that will facilitate plotting the Health Score (y-axis) over Ni Conc (x-axis). Since the concentrations increase on a logarithmic scale, you need to plot it on a logarithmic scale on the x-axis if you want to best see those values. This below produces two new columns called Ni.Conc.trans that forces the 0 to become a 0.01 since the log of 0 would not be plottable in the log graph below using the function scale_x_log10().
+
+Below we produce a couple of data frames that will facilitate plotting the Health Score (y-axis) over Ni Conc (x-axis). Since the concentrations increase on a logarithmic scale, you need to plot it on a logarithmic scale on the x-axis if you want to best see those values. This below produces two new columns called NiCl2.Nom.Conc.trans that forces the 0 to become a 0.01 since the log of 0 would not be plottable in the log graph below using the function scale_x_log10().
+
 ```{r}
 t2_LC50 <- t_LC50 %>%
-  mutate(Ni.Conc.trans = ifelse(Ni.Conc. == 0, 0.01, Ni.Conc.)) %>%
+  mutate(NiCl2.Nom.Conc.trans = ifelse(NiCl2.Nom.Conc. == 0, 0.01, NiCl2.Nom.Conc.)) %>%
   filter(hpe !=0)
 
 mean_health_score_no0hpe <- mean_health_score %>%
-  mutate(Ni.Conc.trans = ifelse(Ni.Conc. == 0, 0.01, Ni.Conc.)) %>%
+  mutate(NiCl2.Nom.Conc.trans = ifelse(NiCl2.Nom.Conc. == 0, 0.01, NiCl2.Nom.Conc.)) %>%
   filter(hpe !=0)
 ```
-
 
 # Mortality
 
@@ -137,10 +145,10 @@ mean_health_score_no0hpe <- mean_health_score %>%
 require(binom)
 
 calc_mort_percent <- function(data) {
-  total_individuals <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = length)
-  total_mortality <- aggregate(Mortality ~ hpe + Ni.Conc., data = data, FUN = sum)
+  total_individuals <- aggregate(Mortality ~ hpe + NiCl2.Nom.Conc., data = data, FUN = length)
+  total_mortality <- aggregate(Mortality ~ hpe + NiCl2.Nom.Conc., data = data, FUN = sum)
   
-  merged_data <- merge(total_individuals, total_mortality, by = c("hpe", "Ni.Conc."), suffixes = c(".total", ".count"))
+  merged_data <- merge(total_individuals, total_mortality, by = c("hpe", "NiCl2.Nom.Conc."), suffixes = c(".total", ".count"))
   
   # Calculate proportions and confidence intervals
   merged_data$percentage_mortality <- (merged_data$Mortality.count / merged_data$Mortality.total) * 100
@@ -154,6 +162,7 @@ calc_mort_percent <- function(data) {
 ```
 
 ## Using the mortality function on our data
+
 ```{r}
 
 mortality_percentage <- calc_mort_percent(t_LC50)
@@ -162,26 +171,28 @@ mortality_percentage$hpe <- as.character(mortality_percentage$hpe) # Did this so
 ```
 
 Review the data frame mortality_percentage.
+
 ```{r}
 print(mortality_percentage)
 summary(mortality_percentage)
 
 hist(mortality_percentage$percentage_mortality)
 ```
+
 Data follows a bimodal distribution.
 
 # Survivorship
 
-For now will not be using Survivorship in final deliverables but may be useful in future toxicology studies
-## Survivorship Function
+For now will not be using Survivorship in final deliverables but may be useful in future toxicology studies \## Survivorship Function
+
 ```{r}
 calc_survivor_percent <- function(data) {
   
-  total_individuals <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = length)
+  total_individuals <- aggregate(Alive ~ hpe + NiCl2.Nom.Conc., data = data, FUN = length)
   
-  total_survivor <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = sum)
+  total_survivor <- aggregate(Alive ~ hpe + NiCl2.Nom.Conc., data = data, FUN = sum)
   
-  merged_data <- merge(total_individuals, total_survivor, by = c( "hpe",  "Ni.Conc."), suffixes = c(".total", ".count"))
+  merged_data <- merge(total_individuals, total_survivor, by = c( "hpe",  "NiCl2.Nom.Conc."), suffixes = c(".total", ".count"))
   
   merged_data$percentage_survivor <- (merged_data$Alive.count / merged_data$Alive.total) *100
   
@@ -195,24 +206,25 @@ survival_percent$hpe <- as.character(survival_percent$hpe) # Did this so I can h
 print(survival_percent)
 summary(survival_percent)
 
-survival_percent$Ni.Conc. <- as.numeric(survival_percent$Ni.Conc.) # Did this so geom_smooth actually works
+survival_percent$NiCl2.Nom.Conc. <- as.numeric(survival_percent$NiCl2.Nom.Conc.) # Did this so geom_smooth actually works
 ```
 
-
-
 # Mortality Graphs
+
 ## Data frame for making graphs
+
 ```{r}
 mort_exp <- subset(mortality_percentage, hpe != 0)
 mort_exp$proportion_mortality <- mort_exp$percentage_mortality / 100
 ```
 
 ### Mortality Linear Trendline
+
 ```{r}
 # Plot the data linear
 setwd('..')
 png(filename = "output/mort_linear.png", width = 1200, height = 900)
-ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+ggplot(mort_exp, aes(x = NiCl2.Nom.Conc., y = percentage_mortality)) + 
   geom_point(size = 5, color = "black") +
   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, color = "black") +  # Error bars
   geom_hline(yintercept = 50, linetype = "dashed", color = "red", linewidth = 2) +  # Add red dotted line at y = 50 
@@ -241,11 +253,12 @@ dev.off()
 ```
 
 ### Mortality Logarithmic Trendline
+
 ```{r}
 setwd('..')
 png(filename = "output/mort_percent_log.png", width = 1200, height = 600)
 
-ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+ggplot(mort_exp, aes(x = NiCl2.Nom.Conc., y = percentage_mortality)) + 
   geom_point(size = 5, color = "black") +
   facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe"))) +
   geom_smooth(method = "loess", se = TRUE, color = "darkblue", linewidth = 2) + 
@@ -275,6 +288,7 @@ dev.off()
 ```
 
 ## Extra mortality graphs not included in deliverables (sandbox area)
+
 ```{r}
 setwd('..')
 png(filename = "output/mort_percent_nolog.png", width = 1200, height = 900)
@@ -282,7 +296,7 @@ png(filename = "output/mort_percent_nolog.png", width = 1200, height = 900)
 library(ggplot2)
 
 # Adjusted code with x-axis labels under each facet
-ggplot(mort_exp, aes(x = Ni.Conc., y = percentage_mortality)) + 
+ggplot(mort_exp, aes(x = NiCl2.Nom.Conc., y = percentage_mortality)) + 
   geom_point(size = 5, color = "black") +
   facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe")), scales = "free") +
   geom_smooth(method = "loess", se = TRUE, color = "darkblue", linewidth = 2) + 
@@ -315,7 +329,7 @@ dev.off()
 library(ggplot2)
 
 # Plot the data with sigmoidal (logistic) curve
-ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
+ggplot(mort_exp, aes(x = NiCl2.Nom.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
   geom_point(size = 2) +
   facet_wrap(~ hpe) +
   geom_smooth(method = "glm", method.args = list(family = "binomial"), se = TRUE, color = "black") +  # Use logistic regression
@@ -329,7 +343,6 @@ ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use proportio
 
 ```
 
-
 ```{r}
 library(ggplot2)
 
@@ -337,7 +350,7 @@ library(ggplot2)
 mort_exp$proportion_mortality <- mort_exp$percentage_mortality / 100
 
 # Plot the data with sigmoidal (logistic) curve
-p <- ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
+p <- ggplot(mort_exp, aes(x = NiCl2.Nom.Conc., y = proportion_mortality)) +  # Use proportion for logistic regression
   geom_point(size = 2) +
   facet_wrap(~ hpe) +
   geom_smooth(method = "glm", method.args = list(family = "binomial"), se = TRUE, color = "black") +  # Use logistic regression
@@ -346,7 +359,7 @@ p <- ggplot(mort_exp, aes(x = Ni.Conc., y = proportion_mortality)) +  # Use prop
        y = "Mortality (%)")
 
 # Calculate the x-value where the logistic curve intersects y = 50%
-model <- glm(proportion_mortality ~ Ni.Conc., data = mort_exp, family = "binomial")
+model <- glm(proportion_mortality ~ NiCl2.Nom.Conc., data = mort_exp, family = "binomial")
 intercept_x <- (log(0.5 / (1 - 0.5)) - coef(model)[1]) / coef(model)[2]
 
 p 
@@ -354,7 +367,9 @@ p
 ```
 
 # Survivor Graphs
+
 ### subset data
+
 ```{r}
 surv_24_96 <-subset(survival_percent, hpe %in% c(24, 96))
 ```
@@ -362,12 +377,12 @@ surv_24_96 <-subset(survival_percent, hpe %in% c(24, 96))
 ```{r}
 # Calculate the slope and intersection points for each hpe group
 fit_data <- surv_24_96 %>%
-  filter(Ni.Conc. %in% c(100, 1000)) %>%
+  filter(NiCl2.Nom.Conc. %in% c(100, 1000)) %>%
   group_by(hpe) %>%
   summarize(
-    slope = (percentage_survivor[Ni.Conc. == 1000] - percentage_survivor[Ni.Conc. == 100]) / 
+    slope = (percentage_survivor[NiCl2.Nom.Conc. == 1000] - percentage_survivor[NiCl2.Nom.Conc. == 100]) / 
             (1000 - 100),
-    intercept = percentage_survivor[Ni.Conc. == 100] - slope * 100,
+    intercept = percentage_survivor[NiCl2.Nom.Conc. == 100] - slope * 100,
     x_intercept50 = (50 - intercept) / slope,
     x_intercept90 = (90 - intercept) / slope,
     equation = paste("y = ", round(slope, 2), "x + ", round(intercept, 2))
@@ -379,13 +394,13 @@ surv_24_96 <- surv_24_96 %>%
   left_join(fit_data, by = "hpe")
 ```
 
-
 ### survival 24 and 96 hpe
+
 ```{r}
 setwd('..')
 png(filename = "output/survival_24_96_2025.png", width = 1200, height = 700)
 
-ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe))) + 
+ggplot(surv_24_96, aes(x = NiCl2.Nom.Conc., y = percentage_survivor, color = factor(hpe))) + 
   facet_wrap(~hpe) +
   geom_point(size = 6) +
   geom_line(aes(group = hpe), size = 2) +
@@ -443,7 +458,7 @@ ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe
   ) +
 # 50% survival lines
   geom_segment(data = fit_data, 
-               aes(x = min(surv_24_96$Ni.Conc.), 
+               aes(x = min(surv_24_96$NiCl2.Nom.Conc.), 
                    xend = x_intercept50, 
                    y = 50, yend = 50), 
                linetype = "dashed", color = "red3", linewidth = 1) +  
@@ -451,7 +466,7 @@ ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe
                    y = 0, yend = 50), 
                linetype = "dashed", color = "red3", linewidth = 1)  +
   # 90% survivial lines
- geom_segment(data = fit_data, aes(x = min(surv_24_96$Ni.Conc.), 
+ geom_segment(data = fit_data, aes(x = min(surv_24_96$NiCl2.Nom.Conc.), 
                                    xend = x_intercept90, 
                                    y = 90, yend = 90), 
               linetype = "dashed", color = "royalblue1", linewidth = 1) +  
@@ -462,39 +477,28 @@ ggplot(surv_24_96, aes(x = Ni.Conc., y = percentage_survivor, color = factor(hpe
 dev.off()
 ```
 
-
 # LC50 Estimation
 
-##Logit
-### Dose Response Models Readings
+##Logit \### Dose Response Models Readings
 
 We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and all cease blood movement at 1000 mg/L after 48 hours.
 
-https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0146021
+<https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0146021>
 
-https://www.linkedin.com/pulse/simple-lc50-calculation-pesticide-toxicity-bioassay-using-adhiwibawa
-
+<https://www.linkedin.com/pulse/simple-lc50-calculation-pesticide-toxicity-bioassay-using-adhiwibawa>
 
 Also need to decide that for the ecotox modeling if it makes sense to use a probit, logit, or linear regression model to assess LC50 for whatever time point of interest.
 
-*Probit Model:*
-The probit model assumes that the dose-response relationship follows a cumulative *normal distribution*.
-It is often used when the response variable is binary (alive/dead) or when the response follows a sigmoidal shape.
-Suitable when responses are discrete and there's a natural threshold for response.
+*Probit Model:* The probit model assumes that the dose-response relationship follows a cumulative *normal distribution*. It is often used when the response variable is binary (alive/dead) or when the response follows a sigmoidal shape. Suitable when responses are discrete and there's a natural threshold for response.
 
-*Logit Model:*
-Similar to the probit model, the logit model is used for binary response data.
-It assumes that the log odds of the response is linearly related to the dose.
-Like probit, it's suitable for binary responses but may be preferred for computational reasons or if assumptions align better with the data.
+*Logit Model:* Similar to the probit model, the logit model is used for binary response data. It assumes that the log odds of the response is linearly related to the dose. Like probit, it's suitable for binary responses but may be preferred for computational reasons or if assumptions align better with the data.
 
-*Linear Model:*
-The linear model assumes a linear relationship between the dose and the response.
-It may be appropriate when responses are continuous and show a linear trend across doses.
-However, it may not capture non-linear relationships well, especially if the response plateaus or changes direction.
+*Linear Model:* The linear model assumes a linear relationship between the dose and the response. It may be appropriate when responses are continuous and show a linear trend across doses. However, it may not capture non-linear relationships well, especially if the response plateaus or changes direction.
 
-Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model. HOWEVER IT IS ALSO A REPEATED MEASURES EXP. SO YOU CAN'T USE A LOGIT. So instead use: Generalized Linear Mixed-Effects Model (GLMM) with a binomial family and logit link function 
+Given my data follows a bimodal distribution it would most likely be most appropriate to follow a logit model. HOWEVER IT IS ALSO A REPEATED MEASURES EXP. SO YOU CAN'T USE A LOGIT. So instead use: Generalized Linear Mixed-Effects Model (GLMM) with a binomial family and logit link function
 
 ### Example Ecotox Data
+
 ```{r, dummy ecotox data}
 #install.packages("ecotox")
 library(ecotox)
@@ -535,40 +539,39 @@ hist(t_LC50$Mortality)
 
 ```{r}
 #24 h
-LC50_24h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+LC50_24h <- LC_logit((Mortality / Total) ~ log10(NiCl2.Nom.Conc.), p = c(50),
 weights = Total,
-data = t_LC50[LC50$Ni.Conc. != 0, ],
+data = t_LC50[LC50$NiCl2.Nom.Conc. != 0, ],
 subset = c(hpe == "24"))
 
 print(LC50_24h)
 
 # 48 h
-LC50_48h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+LC50_48h <- LC_logit((Mortality / Total) ~ log10(NiCl2.Nom.Conc.), p = c(50),
 weights = Total,
-data = LC50[LC50$Ni.Conc. != 0, ],
+data = LC50[LC50$NiCl2.Nom.Conc. != 0, ],
 subset = c(hpe == "48"))
 
 print(LC50_48h)
 
 # 72 h
-LC50_72h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+LC50_72h <- LC_logit((Mortality / Total) ~ log10(NiCl2.Nom.Conc.), p = c(50),
 weights = Total,
-data = LC50[LC50$Ni.Conc. != 0, ],
+data = LC50[LC50$NiCl2.Nom.Conc. != 0, ],
 subset = c(hpe == "72"))
 
 print(LC50_72h)
 
 #96 h
-LC50_96h <- LC_logit((Mortality / Total) ~ log10(Ni.Conc.), p = c(50),
+LC50_96h <- LC_logit((Mortality / Total) ~ log10(NiCl2.Nom.Conc.), p = c(50),
 weights = Total,
-data = LC50[LC50$Ni.Conc. != 0, ],
+data = LC50[LC50$NiCl2.Nom.Conc. != 0, ],
 subset = c(hpe == "96"))
 print(LC50_96h)
 ```
 
-
-
 ### Combine LC50 over time
+
 ```{r}
 library(dplyr)
 
@@ -584,8 +587,8 @@ combined_lc50 <- bind_rows(
 
 ```{r}
 
-ggplot(data = t_LC50[t_LC50$Ni.Conc. != 0, ],
-  aes(x = Ni.Conc., y = (Mortality / Total))) +
+ggplot(data = t_LC50[t_LC50$NiCl2.Nom.Conc. != 0, ],
+  aes(x = NiCl2.Nom.Conc., y = (Mortality / Total))) +
   geom_point() +
   geom_smooth(method = "glm",
    method.args = list(family = binomial(link = "logit")),
@@ -593,11 +596,7 @@ ggplot(data = t_LC50[t_LC50$Ni.Conc. != 0, ],
 
 ```
 
-
-
-
-
-## GLMM: Generalized Linear Mixed-Effects Model with a binomial family and logit link function 
+## GLMM: Generalized Linear Mixed-Effects Model with a binomial family and logit link function
 
 ```{r}
 install.packages("lme4")
@@ -605,15 +604,16 @@ library(lme4)
 ```
 
 ```{r}
-glmm_model <- glmer(Mortality ~ hpe + Ni.Conc. + (1|Tunicate.ID),
+glmm_model <- glmer(Mortality ~ hpe + NiCl2.Nom.Conc. + (1|Tunicate.ID),
                     data = t_LC50,
                     family = binomial(link = "logit"))
 
 # Print model summary
 summary(glmm_model)
 ```
+
 ```{r}
-t_LC50_high_dose <- subset(t_LC50, Ni.Conc. == 1000)
+t_LC50_high_dose <- subset(t_LC50, NiCl2.Nom.Conc. == 1000)
 table(t_LC50_high_dose$Mortality)
 
 library(lme4)
@@ -629,10 +629,8 @@ summary(glmm_model_high_dose)
 
 ```
 
-
-
-
 # LC50 Graph
+
 ```{r}
 library(ggrepel)
 
@@ -660,31 +658,31 @@ ggplot(combined_lc50, aes(x = time_point, y = dose)) +
 #dev.off()
 ```
 
-
 # Health Graphs
 
 ## R Square Calcs
+
 ```{r}
 r_squared_values_mean <- mean_health_score %>%
-  group_by(Ni.Conc.) %>%
+  group_by(NiCl2.Nom.Conc.) %>%
   do({
     model <- lm(mean_health ~ hpe, data = .)
     r_squared <- summary(model)$r.squared
-    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+    data.frame(Ni.Conc = unique(.$NiCl2.Nom.Conc.), r_squared = r_squared)
   }) %>%
   ungroup()
 
 r_squared_values_raw <- t_LC50 %>%
-  group_by(Ni.Conc.) %>%
+  group_by(NiCl2.Nom.Conc.) %>%
   do({
     model <- lm(Health ~ hpe, data = .)
     r_squared <- summary(model)$r.squared
-    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+    data.frame(Ni.Conc = unique(.$NiCl2.Nom.Conc.), r_squared = r_squared)
   }) %>%
   ungroup()
 
 r_squared_values_raw_loess <- t_LC50_clean %>%
-  group_by(Ni.Conc.) %>%
+  group_by(NiCl2.Nom.Conc.) %>%
   do({
     loess_fit <- loess(Health ~ hpe, data = ., span = 1)
     predicted <- predict(loess_fit)
@@ -692,13 +690,14 @@ r_squared_values_raw_loess <- t_LC50_clean %>%
     ss_total <- sum((.$Health - mean(.$Health))^2)
     ss_residuals <- sum(residuals^2)
     r_squared <- 1 - (ss_residuals / ss_total)
-    data.frame(Ni.Conc = unique(.$Ni.Conc.), r_squared = r_squared)
+    data.frame(Ni.Conc = unique(.$NiCl2.Nom.Conc.), r_squared = r_squared)
   }) %>%
   ungroup()
 
 ```
 
 ## Multipanel plot health by time
+
 ```{r}
 setwd('..')
 png(filename = "output/health_mean_se_raw.png", width = 2000, height = 1500)
@@ -706,10 +705,10 @@ ggplot() +
   geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 5, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
   geom_point(data = mean_health_score, aes(x = hpe, y = mean_health), size = 9, color = "black") +  # Mean points
   geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se), width = 4) +  # Error bars
-  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
+  facet_wrap(~ NiCl2.Nom.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
   scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
-  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health), method = "loess", se = TRUE, fill= "lightsteelblue2", color = "lightsteelblue3", linewidth = 4, formula = (y ~ x), span = 1) +  # Add linear regression line with SE based on raw data
+  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health), method = "lm", se = TRUE, fill= "lightsteelblue2", color = "lightsteelblue3", linewidth = 4, formula = (y ~ x), span = 1) +  # Add linear regression line with SE based on raw data
   labs(x = "Time (hours)", 
        y = "Health Score"
        ) +
@@ -725,6 +724,59 @@ ggplot() +
 dev.off()
 ```
 
+```{r}
+setwd('..')
+png(filename = "output/health_mean_se_combined.png", width = 2500, height = 1300)
+
+ggplot() + 
+  
+  # Mean points with SE bars, colored by treatment
+  geom_line(data = mean_health_score, 
+            aes(x = hpe, y = mean_health, color = as.factor(NiCl2.Nom.Conc.)), 
+            linewidth = 4, alpha = 0.9) +
+  geom_point(data = mean_health_score, 
+             aes(x = hpe, y = mean_health, color = as.factor(NiCl2.Nom.Conc.)), 
+             size = 8) +
+  geom_errorbar(data = mean_health_score, 
+                aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se, 
+                    color = as.factor(NiCl2.Nom.Conc.)), width = 4, linewidth = 1.5) +
+  
+  # Axis and labels
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0, 10)) +
+
+  scale_color_viridis_d(
+    option ="C",
+    name = expression(paste("NiCl"[2]," (mg/L)")),
+    labels = c("0", "0.1", "1", "10", "100", "1000")
+  ) +
+  
+  labs(
+    x = "Time (hours)", 
+    y = "Health Score"
+  ) +
+  
+  theme_test() +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 45),
+    legend.text = element_text(size = 40),
+    legend.box.margin = margin(t = 0, r = 1, b = 0, l = 1, "cm"),
+    axis.title = element_text(size = 60),
+    axis.text.y = element_text(size = 55, hjust = 1, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 55, vjust = 4.5, hjust = 0.5, margin = margin(t = 50)),
+    legend.key.width = unit(3, "cm"),
+    legend.key.height = unit(1.5, "cm")
+  ) +
+guides(color = guide_legend(override.aes = list(
+  linewidth = 3,
+  size = 8
+)))
+
+dev.off()
+
+```
+
 
 ```{r}
 
@@ -734,7 +786,7 @@ ggplot() +
   geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 0.1, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
   geom_point(data = mean_health_score, aes(x = hpe, y = mean_health), size = 9, color = "black") +  # Mean points
   geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se), width = 5, position = position_dodge(width = 0.5)) +  # Error bars
-  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
+  facet_wrap(~ NiCl2.Nom.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
   scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
   geom_smooth(data = mean_health_score, aes(x = hpe, y = mean_health), method = "lm", se = TRUE, color = "thistle", fill= "thistle" , linewidth = 5) +  # Add linear regression line with SE based on raw data
@@ -755,8 +807,8 @@ dev.off()
 
 ```
 
-
 ## Plot the trendlines of declined health over time on one graph
+
 ```{r}
 setwd('..')
 png(filename = "output/health_mean_one.png", width = 1400, height = 1120)
@@ -766,9 +818,9 @@ custom_labeller <- as_labeller(c("0" = "0", "0.1" = "0.1", "1" = "1", "10" = "10
 
 ggplot() + 
   geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 0.1, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
-  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health, color = as.factor(Ni.Conc.)), size = 4) +  # Mean points with color by Ni.Conc.
-  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se, color = as.factor(Ni.Conc.)), width = 3) +  # Error bars with color by Ni.Conc.
-  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health, color = as.factor(Ni.Conc.), fill = as.factor(Ni.Conc.)), method = "lm", se = TRUE, linewidth = 2) +  # Add linear regression line with SE based on raw data
+  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health, color = as.factor(NiCl2.Nom.Conc.)), size = 4) +  # Mean points with color by NiCl2.Nom.Conc.
+  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se, color = as.factor(NiCl2.Nom.Conc.)), width = 3) +  # Error bars with color by NiCl2.Nom.Conc.
+  geom_smooth(data = t_LC50_clean, aes(x = hpe, y = Health, color = as.factor(NiCl2.Nom.Conc.), fill = as.factor(NiCl2.Nom.Conc.)), method = "lm", se = TRUE, linewidth = 2) +  # Add linear regression line with SE based on raw data
   scale_color_brewer(palette = "PuOr", labels = custom_labeller) +  # Customize colors and labels for lines
   scale_fill_brewer(palette = "PuOr", labels = custom_labeller) +  # Customize fill for SE
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
@@ -794,13 +846,14 @@ dev.off()
 ```
 
 ## Exploaratory raw health data over time
+
 ```{r}
 
 setwd('..')
 png(filename = "output/health_raw.png", width = 1400, height = 1120)
 ggplot(t_LC50, aes(x = hpe, y = Health)) + 
   geom_point(size = 3, color = "black") +  # Adjust the size of the points
-  facet_wrap(~ Ni.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
+  facet_wrap(~ NiCl2.Nom.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
   scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
   scale_y_continuous(breaks = seq(0, 10, by = 1), expand = c(0.0,0.0)) +
   ylim(0, 10) +
@@ -818,22 +871,22 @@ ggplot(t_LC50, aes(x = hpe, y = Health)) +
 dev.off()
 ```
 
-
 ## Health over increasing Ni Conc
+
 ```{r}
 library(scales)
 
 setwd('..')
 png(filename = "output/health_by_conc.png", width = 1400, height = 1100)
 ggplot() + 
-  geom_point(data = t2_LC50, aes(x = Ni.Conc.trans, y = Health), size = 0.01, color = "white", alpha = 0.5) +  # Raw data points for SE calculation
-  geom_point(data = mean_health_score_no0hpe, aes(x = Ni.Conc.trans, y = mean_health), size = 4, color = "black") +  # Mean points
-  geom_errorbar(data = mean_health_score_no0hpe, aes(x = Ni.Conc.trans, ymin = mean_health - se, ymax = mean_health + se), width = 0.2) +  # Error bars
+  geom_point(data = t2_LC50, aes(x = NiCl2.Nom.Conc.trans, y = Health), size = 0.01, color = "white", alpha = 0.5) +  # Raw data points for SE calculation
+  geom_point(data = mean_health_score_no0hpe, aes(x = NiCl2.Nom.Conc.trans, y = mean_health), size = 4, color = "black") +  # Mean points
+  geom_errorbar(data = mean_health_score_no0hpe, aes(x = NiCl2.Nom.Conc.trans, ymin = mean_health - se, ymax = mean_health + se), width = 0.2) +  # Error bars
   facet_wrap(~ hpe, labeller = as_labeller(c("24" = "24 hpe", "48" = "48 hpe", "72" = "72 hpe", "96" = "96 hpe"))) +
   scale_x_log10(breaks = c(0.01, 0.1, 1, 10, 100, 1000),
                 labels = c("0", "0.1", "1", "10", "100", "1000")) +  # Refined breaks and labels
   scale_y_continuous(breaks = seq(0, 10, by = 2), expand = c(0.01, 0.01), limits = c(0, 10)) +
-  geom_smooth(data = t2_LC50, aes(x = Ni.Conc.trans, y = Health), method = "lm", se = TRUE, color = "darkblue", linewidth = 5) +  # Add linear regression line with SE based on raw data
+  geom_smooth(data = t2_LC50, aes(x = NiCl2.Nom.Conc.trans, y = Health), method = "lm", se = TRUE, color = "darkblue", linewidth = 5) +  # Add linear regression line with SE based on raw data
   labs(x = "Nickel Concentration (mg/L)", 
        y = "Health Score"
        ) +
@@ -848,12 +901,12 @@ ggplot() +
 dev.off()
 ```
 
-
-
 # Statistical analysis of health decline differences
+
 If you look at the graphs, it appears that the decline in health over time in accordance with the independent variables may be significantly different. Need to sandbox a way to analyze differences in slopes among trend lines.
 
 ## ANCOVA of linear models for health decline
+
 ```{r}
 # Load necessary libraries
 library(dplyr)
@@ -861,13 +914,13 @@ library(ggplot2)
 
 # Fit linear models for each concentration
 lm_models <- mean_health_score %>% 
-  group_by(Ni.Conc.) %>% 
+  group_by(NiCl2.Nom.Conc.) %>% 
   do(model = lm(mean_health ~ hpe, data = .))
 
 # Summarize the models
 model_summaries <- lm_models %>% 
   summarize(
-    Ni.Conc. = unique(Ni.Conc.),
+    NiCl2.Nom.Conc. = unique(NiCl2.Nom.Conc.),
     intercept = coef(model)[1],
     slope = coef(model)[2],
     p_value = summary(model)$coefficients[2, 4]
@@ -878,23 +931,26 @@ print(model_summaries)
 
 #ANCOVA
 # Combine all data and fit a single model with interaction to compare slopes or the rate in decline in health over time by concentration of nickel
-combined_model <- lm(mean_health ~ hpe * Ni.Conc., data = mean_health_score)
+combined_model <- lm(mean_health ~ hpe * NiCl2.Nom.Conc., data = mean_health_score)
 summary(combined_model)
 
 ```
+
 ## ANOVA?
+
 ### ANOVA assumptions for raw health data
+
 ```{r}
 summary(t_LC50)
 
 fact_LC50 <- t_LC50 %>%
   mutate(hpe = as.factor(hpe)) %>%
-  mutate(Ni.Conc. = as.factor(Ni.Conc.))
+  mutate(NiCl2.Nom.Conc. = as.factor(NiCl2.Nom.Conc.))
 
 summary(fact_LC50)
 
 ## Meeting the ANOVA assumptions
-leveneTest(Health ~ Ni.Conc.*hpe, data = fact_LC50)
+leveneTest(Health ~ NiCl2.Nom.Conc.*hpe, data = fact_LC50)
 #p-value < 0.05, therefore equal-variances are NOT met, WOULD NEED TO TRANSFORM THE DATA
 
 shapiro.test(fact_LC50$Health)
@@ -906,6 +962,7 @@ qqnorm(fact_LC50$Health)
 ```
 
 ### Transformation to try to make assumptions work for ANOVA raw health data
+
 ```{r}
 # Transform Health variable
 t_LC50$Health_sqrt <- sqrt(t_LC50$Health)
@@ -917,31 +974,27 @@ hist(t_LC50$Health_sqrt, main = "Transformed Health (sqrt)", xlab = "Health")
 shapiro.test(t_LC50$Health_sqrt)
 
 # Perform Levene's test on transformed data
-leveneTest(Health_sqrt ~ Ni.Conc., data = t_LC50)
+leveneTest(Health_sqrt ~ NiCl2.Nom.Conc., data = t_LC50)
 
 # Run ANOVA on transformed data
-#anova_model <- aov(Health_sqrt ~ Ni.Conc., data = t_LC50)
+#anova_model <- aov(Health_sqrt ~ NiCl2.Nom.Conc., data = t_LC50)
 #summary(anova_model)
 
 ```
 
 Still does not meet assumptions. Can't use ANOVA for health data.
 
-
-
 ## Post Hoc Testing Simple Slopes
-This bit needs to be fixed and also further researched. As above there is evidently a signficant difference in the slopes by Ni.Conc.:hpe but at the moment can't say exactly which are different from which.
+
+This bit needs to be fixed and also further researched. As above there is evidently a signficant difference in the slopes by NiCl2.Nom.Conc.:hpe but at the moment can't say exactly which are different from which.
+
 ```{r}
 library(emmeans)
 # Simple slopes analysis
-simple_slopes <- emmeans(combined_model, ~ hpe | Ni.Conc.)
+simple_slopes <- emmeans(combined_model, ~ hpe | NiCl2.Nom.Conc.)
 summary(simple_slopes)
 
 pairwise_comparisons <- pairs(simple_slopes)
 summary(pairwise_comparisons)
 
 ```
-
-
-
-
