@@ -1,0 +1,254 @@
+---
+title: "02.2-LC50-ammendment"
+output: html_document
+date: "2025-08-12"
+---
+
+# Setup
+
+```{r, eval =TRUE}
+library(knitr)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(hrbrthemes)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+library(ecotox)
+library(wesanderson)
+library(viridis)
+library(ggrepel)
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = FALSE)
+```
+
+# Retrieving Data from Google Sheets
+
+Make sure you have made your Google sheet publicly available to anyone that has the link. If you make any updates to the sheet just re-curl the data, meaning just re-run the code below.
+
+## Mortality Data
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1JtJO3EX06BYK4pYwZZ7b7ZCoTyZcAeuTRka_9kA-yPk/export?exportFormat=csv | tee data/LC50.csv
+```
+
+## Nickel ICPMS Data for LC50 estimation
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1sCogpUsK6rZ7--VgcameLrresiCdPaMDBOaPZvJWWHg/export?exportFormat=csv | tee data/icpms.ni.csv
+```
+
+Read in the data to your local R environment.
+
+```{r, eval=TRUE}
+setwd('..')
+LC50 <- read.csv(file = "data/LC50.csv")  
+icpms <- read.csv(file = "data/icpms.ni.csv")
+```
+
+# Cleaning up Data
+
+## Add simplified scoring columns and convert dates
+
+Convert Dates
+
+```{r, eval=TRUE}
+LC50$date <- mdy(LC50$date) #convert the Date column from characters to true Date
+```
+
+Simple Stage column added:
+
+```{r}
+LC50 <- LC50 %>%
+  mutate(simple_stage = case_when(
+    stage %in% c("A1", "A2") ~ "A",
+    stage %in% c("B1", "B2") ~ "B",
+    stage %in% c("C1", "C2") ~ "C",
+    stage == "D" ~ "D",
+    TRUE ~ NA_character_  # This will handle any other cases or return NA if none match
+  ))
+```
+
+Simple health scoring column added
+
+```{r}
+# Create new simplified health scoring
+LC50 <- LC50 %>%
+  mutate(simple_health = case_when(
+    Health == "0" ~ "0",
+    Health %in% c("1", "2") ~ "1",
+    Health %in% c("3", "4") ~ "2",
+    Health %in% c("5", "6") ~ "3",
+    Health %in% c("7", "8") ~ "4",
+    Health %in% c("9", "10") ~ "5",
+    TRUE ~ NA_character_)) %>%
+  transform(simple_health = as.numeric(simple_health))
+
+summary(LC50)
+```
+
+## Excluding tunicate outliers
+
+Will need to exclude two individuals from study. DM032024_C03 (0.1 mg/L condition) and DM042024_C02 (1 mg/L condition). Results in 8 replicates for all treatments except 7 only for the 1 mg/L condition.
+
+DM032024_C03: Cut at 24 hour mark.
+
+DM042024_C02: Decline in health as it was not healthy enough to begin with.
+
+DM022024_C01: Does not have a match for the SOD assay at the 96 hr mark so will be excluded from that. Will need to be consistent.
+
+```{r}
+t_LC50 <- LC50[!is.na(LC50$true_rep), ]
+```
+
+##
+
+```{r}
+icpms <- icpms[icpms$experiment != "DM",] # exclude the De Moines environmental water samples confirming absence of nickel in environment from which tunicates were pulled 
+```
+
+
+
+# Survivorship
+
+For now will not be using Survivorship in final deliverable but may be useful in future toxicology studies
+
+## Survivorship Function
+
+```{r}
+calc_survivor_percent <- function(data) {
+  
+  total_individuals <- aggregate(Alive ~ hpe + NiCl2.Nom.Conc., data = data, FUN = length)
+  
+  total_survivor <- aggregate(Alive ~ hpe + NiCl2.Nom.Conc., data = data, FUN = sum)
+  
+  merged_data <- merge(total_individuals, total_survivor, by = c( "hpe",  "NiCl2.Nom.Conc."), suffixes = c(".total", ".count"))
+  
+  merged_data$percentage_survivor <- (merged_data$Alive.count / merged_data$Alive.total) *100
+  
+  return(merged_data)
+}
+
+survival_percent <- calc_survivor_percent(t_LC50)
+
+survival_percent$hpe <- as.character(survival_percent$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
+
+print(survival_percent)
+summary(survival_percent)
+
+survival_percent$NiCl2.Nom.Conc. <- as.numeric(survival_percent$NiCl2.Nom.Conc.) # Did this so geom_smooth actually works
+```
+
+# Survivor Graphs
+
+### subset data
+
+```{r}
+surv_24_96 <-subset(survival_percent, hpe %in% c(24, 96))
+```
+
+
+```{r}
+# Calculate the slope and intersection points for each hpe group
+fit_data <- surv_24_96 %>%
+  filter(NiCl2.Nom.Conc.
+ %in% c(100, 1000)) %>%
+  group_by(hpe) %>%
+  summarize(
+    slope = (percentage_survivor[NiCl2.Nom.Conc.
+ == 1000] - percentage_survivor[NiCl2.Nom.Conc.
+ == 100]) / 
+            (1000 - 100),
+    intercept = percentage_survivor[NiCl2.Nom.Conc.
+ == 100] - slope * 100,
+    x_intercept50 = (50 - intercept) / slope,
+    x_intercept90 = (90 - intercept) / slope,
+    equation = paste("y = ", round(slope, 2), "x + ", round(intercept, 2))
+
+  )
+
+# Merge the intersection data with the original data
+surv_24_96 <- surv_24_96 %>%
+  left_join(fit_data, by = "hpe")
+```
+### survival 24 and 96 hpe
+
+
+
+```{r}
+setwd('..')
+png(filename = "output/survival_24_96_2025_nofacet.png", width = 900, height = 700)
+
+ggplot(surv_24_96, aes(x = NiCl2.Nom.Conc., y = percentage_survivor, color = factor(hpe))) + 
+  
+  # Points with different shapes for 24h vs 96h
+  geom_point(aes(shape = factor(hpe)), size = 5) +
+
+  # Lines connecting points
+  geom_line(aes(group = hpe), size = 1) +
+
+  # Manual color scale
+  scale_color_manual(values = c("black", "darkgray"), name = "hpe") +
+
+  # Manual shape scale: solid for 24, open for 96
+  scale_shape_manual(values = c("24" = 16, "96" = 18), name = "hpe") +
+
+  labs(x = "Nominal Nickel (II) Chloride (mg/L)",
+       y = "Survival (%)") +
+
+  scale_y_continuous(breaks = seq(0, 100, by = 10), expand = c(0.02, 0.02)) +
+  scale_x_continuous(expand = c(0.02, 0.02)) +
+
+  theme_test() +
+  theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "white"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 20),
+    axis.text.y = element_text(size = 20, hjust = 1.2, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 20, vjust = 3, hjust = 0.5, margin = margin(t = 20)),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    strip.text = element_blank(),  
+    strip.background = element_blank(),
+    panel.spacing = unit(5, "lines")
+  ) +
+
+  # Labels for 50% survival
+  geom_label_repel(
+    data = fit_data,
+    aes(x = x_intercept50, y = 50, label = paste(round(x_intercept50), "mg/L")),
+    box.padding = unit(2, "lines"),
+    label.padding = unit(0.6, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.size = 1,
+    size = 8,
+    color = "black",
+    nudge_x = 50,
+    nudge_y = 5,
+    show.legend = FALSE
+  ) +
+
+  # 50% survival lines
+  geom_segment(data = fit_data, 
+               aes(x = min(surv_24_96$NiCl2.Nom.Conc.), 
+                   xend = x_intercept50, 
+                   y = 50, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1) +  
+  geom_segment(aes(x = x_intercept50, xend = x_intercept50, 
+                   y = 0, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1)
+
+dev.off()
+```
