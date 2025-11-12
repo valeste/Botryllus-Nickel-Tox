@@ -479,7 +479,8 @@ dev.off()
 
 # LC50 Estimation
 
-##Logit \### Dose Response Models Readings
+##Logit 
+### Dose Response Models Readings
 
 We do not have a traditional sigmoidal dose response curve as an option. Botryllus remain with heartbeat up to 100 mg/L and all cease blood movement at 1000 mg/L after 48 hours.
 
@@ -723,7 +724,7 @@ ggplot() +
 
 dev.off()
 ```
-
+#  Health Final Graph
 ```{r}
 setwd('..')
 png(filename = "output/health_mean_se_combined.png", width = 2500, height = 1300)
@@ -747,7 +748,7 @@ ggplot() +
 
   scale_color_viridis_d(
     option ="C",
-    name = expression(paste("NiCl"[2]," (mg/L)")),
+    name = expression(paste("Nom. NiCl"[2]," (mg/L)")),
     labels = c("0", "0.1", "1", "10", "100", "1000")
   ) +
   
@@ -777,35 +778,6 @@ dev.off()
 
 ```
 
-
-```{r}
-
-setwd('..')
-png(filename = "output/health_mean.png", width = 2000, height = 1120)
-ggplot() + 
-  geom_point(data = t_LC50_clean, aes(x = hpe, y = Health), size = 0.1, color = "white", alpha = 0.5) +  # Raw data points for SE calculation and made it white so it blends into the background
-  geom_point(data = mean_health_score, aes(x = hpe, y = mean_health), size = 9, color = "black") +  # Mean points
-  geom_errorbar(data = mean_health_score, aes(x = hpe, ymin = mean_health - se, ymax = mean_health + se), width = 5, position = position_dodge(width = 0.5)) +  # Error bars
-  facet_wrap(~ NiCl2.Nom.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
-  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
-  scale_y_continuous(breaks = seq(0, 10, by = 2), limits = c(0,10)) +
-  geom_smooth(data = mean_health_score, aes(x = hpe, y = mean_health), method = "lm", se = TRUE, color = "thistle", fill= "thistle" , linewidth = 5) +  # Add linear regression line with SE based on raw data
-  labs(x = "Time (hours)", 
-       y = "Average Health Score"
-       ) +
-  theme_test() +
-  theme(
-    strip.text = element_text(size = 40),  # Adjust the size of the facet wrap labels
-    axis.title = element_text(size = 50),
-    axis.text.y = element_text(size = 40, hjust = 1, margin = margin(r = 20)),
-    axis.text.x = element_text(size = 40, vjust = 3, hjust = 0.5, margin = margin(t=20))
-  ) #+
-   # geom_text(data = r_squared_values_mean, aes(x = 48, y = 9, label = paste("R² =", round(r_squared, 2))), size = 8, color = "blue")
-
-
-dev.off()
-
-```
 
 ## Plot the trendlines of declined health over time on one graph
 
@@ -845,31 +817,7 @@ dev.off()
 
 ```
 
-## Exploaratory raw health data over time
 
-```{r}
-
-setwd('..')
-png(filename = "output/health_raw.png", width = 1400, height = 1120)
-ggplot(t_LC50, aes(x = hpe, y = Health)) + 
-  geom_point(size = 3, color = "black") +  # Adjust the size of the points
-  facet_wrap(~ NiCl2.Nom.Conc., labeller = as_labeller(c("0" = "0 mg/L", "0.1" = "0.1 mg/L", "1" = "1 mg/L", "10" = "10 mg/L", "100" = "100 mg/L", "1000" = "1000 mg/L"))) +
-  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), expand = c(0.05, 0.1)) +
-  scale_y_continuous(breaks = seq(0, 10, by = 1), expand = c(0.0,0.0)) +
-  ylim(0, 10) +
-  geom_smooth(method = "lm", se = TRUE, color = "darkblue", linewidth = 5) +  # Add linear regression line with SE
-  labs(x = "Time (hours)", 
-       y = "Health Score"
-       ) +
-  theme_test() +
-  theme(
-    strip.text = element_text(size = 40),  # Adjust the size of the facet wrap labels
-    axis.title = element_text(size = 50),
-    axis.text.y = element_text(size = 40, hjust = 1.5, margin = margin(r = 20)),
-    axis.text.x = element_text(size = 40, vjust = 3, hjust = 0.5, margin = margin(t=20))
-  )
-dev.off()
-```
 
 ## Health over increasing Ni Conc
 
@@ -906,7 +854,7 @@ dev.off()
 If you look at the graphs, it appears that the decline in health over time in accordance with the independent variables may be significantly different. Need to sandbox a way to analyze differences in slopes among trend lines.
 
 ## ANCOVA of linear models for health decline
-
+NOT IMPORTANT TO DO DO NOT PROCEED. For now this information regarding decline in health will remain descriptive using the above graphs as it distracts from the purpose of the study. 
 ```{r}
 # Load necessary libraries
 library(dplyr)
@@ -939,6 +887,7 @@ summary(combined_model)
 ## ANOVA?
 
 ### ANOVA assumptions for raw health data
+DOES NOT MEET ANOVA ASSUMPTIONS
 
 ```{r}
 summary(t_LC50)
