@@ -1,4 +1,4 @@
-hom_num,First QAQC and what was edited in physical Lab Notebook,Tunicate.ID,date,hpe,Ni.Conc.,true_rep,rep_exp,tube_mass_mg,Tunicate Mass (g),tun_mass_mg,PBS (mL),pbs_ul,comments,recorded_by_TT_undergrad
+hom_num,First QAQC and what was edited in physical Lab Notebook,Tunicate.ID,date,hpe,NiCl2.Nom.Conc.,true_rep,rep_exp,tube_mass_mg,Tunicate Mass (g),tun_mass_mg,PBS (mL),pbs_ul,comments,recorded_by_TT_undergrad
 1,,DM012024_C13,4/9/24,24,0,RR2,R1,1.055,0.046,46,0.23,230,,T1 R1 4/9/24 
 2,,DM012024_C02*,4/9/24,24,0,RR1,R2,1.038,0.029,29,0.145,145,,4/9/24 S1 R2 T1
 3,,DM012024_C20,4/9/24,24,0,RR3,R3,1.034,0.025,25,0.125,125,,T1 R3 4/9/24
@@ -72,7 +72,7 @@ hom_num,First QAQC and what was edited in physical Lab Notebook,Tunicate.ID,date
 72,,DM032024_C11,5/14/24,24,1000,RR6,R1,1.043,0.034,34,0.17,170,,5/17/24 R1-S2 1000
 73,,DM032024_C13,5/14/24,24,1000,RR7,R2,1.018,0.009,9,0.045,45,,5/14/24 R2-S1 1000
 74,,DM032024_C13,5/14/24,24,1000,RR7,R2,1.033,0.024,24,0.12,120,,5/17/24 R2 S2 1000
-75,MAY NOT NEED THIS,,,,,,,1.028,0.019,19,0.095,95,sample id?,S
+75,MAY NOT NEED THIS,,,24,1000,,,1.028,0.019,19,0.095,95,sample id?,S
 76,,DM032024_C06,5/14,24,0,RR7,R2,1.045,,36,,200,,R2 S1 0 24 hpe
 77,,DM042024_C11,5/24/24,96,0.1,RR8,R2,1.048,0.039,39,0.195,195,,5/24/24 LC50 E4 R2-S2 0.1 96 hpe
 78,,DM042024_C01,5/24/24,96,0,RR8,R1,1.028,0.019,19,0.095,95,,5/24/24 LC50 E4 R1-S2 0 96 hpe
@@ -99,3 +99,6 @@ hom_num,First QAQC and what was edited in physical Lab Notebook,Tunicate.ID,date
 99,,DM032024_C07,5/17/24,96,0.1,RR7,R2,1.033,0.024,24,0.12,120,,5/17/24 LC50 E3 R2-S2 0.1 96 hpe
 100,,DM032024_C10,5/17/24,96,10,RR7,R2,1.053,0.044,44,0.22,220,,5/17/24 LC50 E3 R2-S2 10 96 hpe
 101,,DM032024_C09,5/17/24,96,1,RR7,R2,1.034,0.025,25,0.125,125,,5/17/24 LC50 E3 R2-S2 1 96 hpe
+,,,,,,,,,,,,,,
+,,,,,,,,,,30.43,,,,
+,,,,,,,,,,15.27343703,,,,
