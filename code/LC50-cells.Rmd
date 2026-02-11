@@ -1,0 +1,30 @@
+---
+title: "LC50 cells"
+output: html_document
+date: "2025-04-20"
+---
+
+# Function for Survival Percent
+```{r}
+calc_survivor_percent <- function(data) {
+  
+  total_individuals <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = length)
+  
+  total_survivor <- aggregate(Alive ~ hpe + Ni.Conc., data = data, FUN = sum)
+  
+  merged_data <- merge(total_individuals, total_survivor, by = c( "hpe",  "Ni.Conc."), suffixes = c(".total", ".count"))
+  
+  merged_data$percentage_survivor <- (merged_data$Alive.count / merged_data$Alive.total) *100
+  
+  return(merged_data)
+}
+
+survival_percent <- calc_survivor_percent(t_LC50)
+
+survival_percent$hpe <- as.character(survival_percent$hpe) # Did this so I can have discrete colors for plot for the time points instead of a gradient
+
+print(survival_percent)
+summary(survival_percent)
+
+survival_percent$Ni.Conc. <- as.numeric(survival_percent$Ni.Conc.) # Did this so geom_smooth actually works
+```
