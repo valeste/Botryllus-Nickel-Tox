@@ -49,8 +49,13 @@ noname_sig_genes <- rnaseq_results %>%
 sig_genes <- rnaseq_results %>%
   filter(adj.P.Val < 0.1, SYMBOL != Gene)
 
+all_sig_genes <- rnaseq_results %>%
+  filter(adj.P.Val<0.1)
+
 # Write a new csv that just contains the results of the significant unannotated genes
-write.csv(noname_sig_genes, file = "noname.csv")
+write.csv(noname_sig_genes, file = "../data/noname.csv")
+write.csv(sig_genes, file = '../output/sig_genes.csv')
+write.csv(all_sig_genes, file = '../data/all_sig_genes.csv' )
 ```
 There are 25 annotated genes and 29 unannotated genes.
 We will need to use this file to make a gene list to extract all of the sequences of the genes in that csv file.

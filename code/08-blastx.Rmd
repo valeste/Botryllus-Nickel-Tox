@@ -12,12 +12,14 @@ gunzip -k uniprot_sprot_r2025_03.fasta.gz
 ls ../data
 ```
 
+
+must ssh into raven
+
 ```{r, engine='bash'}
 /home/shared/ncbi-blast-2.11.0+/bin/makeblastdb \
 -in /home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/data/uniprot_sprot_r2025_03.fasta \
 -dbtype prot \
 -out /home/shared/8TB_HDD_02/cvaldi/Botryllus-Nickel-Tox/output/blastdb/uniprot_sprot_r2025_03
-
 ```
 
 ```{r, engine='bash'}
