@@ -1,0 +1,92 @@
+---
+title: "10-Spiderplot of Higher Order Gene Categories"
+output: html_document
+date: "2025-12-03"
+---
+```{r}
+install.packages(c("fmsb", "scales"))
+library(dplyr)
+```
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1lzN17idla473wqd-z0qijDoPrKjB8H2TuEQWUPRSpsE/export?exportFormat=csv | tee data/deg_categories.csv
+```
+
+
+```{r}
+setwd('..')
+deg_df <- read.csv(file= "data/deg_categories.csv")
+```
+
+```{r}
+
+
+# Step 1: keep only rows you're actually discussing
+deg_included <- deg_df %>%
+  filter(`Included.in.HigherOrder.` == TRUE)
+
+# Step 2: drop categories with < 2 genes
+deg_multiCat <- deg_included %>%
+  group_by(`Higher.Order.Category`) %>%
+  filter(n() >= 2) %>% 
+  ungroup()
+
+# Sanity check: counts per retained category
+cat_counts <- deg_multiCat %>%
+  count(`Higher.Order.Category`, name = "count")
+
+cat_counts
+
+```
+```{r}
+library(fmsb)
+
+# Vector of counts (names = Higher Order Category)
+counts_vec <- setNames(cat_counts$count,
+                       cat_counts$`Higher Order Category`)
+
+
+# Radar chart data:
+#  - first row: max for each axis
+#  - second row: min for each axis
+#  - third row: your actual counts
+radar_df <- rbind(
+  max = rep(12, length(counts_vec)),
+  min = rep(0,                length(counts_vec)),
+  counts_vec
+)
+
+radar_df <- as.data.frame(radar_df)
+#
+#adds gene category to each item
+colnames(radar_df) <- cat_counts[[1]]
+
+
+
+```
+
+```{r}
+setwd('..')
+png(filename = "output/spider_deg_all_categories.png",  width = 2600, height = 2000, res = 200)
+
+# Plot
+radarchart(
+  radar_df,
+  axistype = 1,
+  pcol     = "darkblue",
+  pfcol    = scales::alpha("steelblue", 0.4),
+  plwd     = 3,
+  cglcol   = "grey",
+  axislabcol="grey",
+  cglty=1,
+  cglwd = 1,
+  caxislabels=seq(0,12,3),
+  calcex = 2,
+  vlcex    = 2  # label size
+)
+dev.off()
+```
+
+
