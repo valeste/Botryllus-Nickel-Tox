@@ -1,0 +1,93 @@
+---
+title: "Blastogenic Development in EC50"
+output: html_document
+date: "2025-08-16"
+---
+```{r}
+
+library(dplyr)
+library(ggplot2)
+
+# 1. Map stages to numeric values
+# Adjust according to your staging system; this is the linear numeric version
+stage_numeric_map <- c(
+  "A1" = 1,
+  "A2" = 2,
+  "B1" = 3,
+  "B2" = 4,
+  "C1" = 5,
+  "C2" = 6,
+  "D"  = 7
+)
+
+t_LC50 <- t_LC50 %>%
+  mutate(stage_num = stage_numeric_map[stage])
+
+# 2. Calculate developmental slope per tunicate
+development_slopes <- t_LC50 %>%
+  group_by(Tunicate.ID, NiCl2.Nom.Conc.) %>%
+  summarise(
+    slope = if(n() > 1) coef(lm(stage_num ~ hpe))[2] else NA,
+    .groups = "drop"
+  )
+
+# 3. Summarize percent progressing (slope > 0) per concentration and hpe
+# We assume hpe is unique per tunicate for max(hpe)
+blastogenic_summary <- development_slopes %>%
+  left_join(
+    t_LC50 %>% select(Tunicate.ID, hpe) %>% group_by(Tunicate.ID) %>% summarise(max_hpe = max(hpe)),
+    by = "Tunicate.ID"
+  ) %>%
+  group_by(NiCl2.Nom.Conc., max_hpe) %>%
+  summarise(
+    n_tunicates = n(),
+    n_progressing = sum(slope > 0, na.rm = TRUE),
+    percent_progressing = (n_progressing / n_tunicates) * 100,
+    .groups = "drop"
+  )
+
+# 4. Plot percent progressing vs concentration
+ggplot(blastogenic_summary, aes(x = NiCl2.Nom.Conc., y = percent_progressing, color = factor(max_hpe))) +
+  geom_point(size = 3) +
+  geom_line(aes(group = factor(max_hpe)), size = 1.2) +
+  labs(
+    x = "Nickel (II) Chloride Concentration (mg/L)",
+    y = "Percent Tunicates Progressing",
+    color = "Hours Post Exposure"
+  ) +
+  theme_classic()
+
+```
+
+```{r}
+
+setwd('..')
+png(filename = "output/blastogenic_devo_LC50.png", width = 900, height = 700)
+
+library(ggplot2)
+library(dplyr)
+
+# Make sure stages are numeric
+t_LC50 <- t_LC50 %>%
+  mutate(stage_num = stage_numeric_map[stage])
+
+# Exploratory plot: each tunicate over time
+ggplot(t_LC50, aes(x = hpe, y = stage_num, color = factor(NiCl2.Nom.Conc.))) +
+  geom_point(size = 2) +
+  facet_wrap(~NiCl2.Nom.Conc., ncol = 3) +
+  geom_line(aes(group = Tunicate.ID), se = FALSE, linetype = "solid", alpha = 0.5) +
+  scale_y_continuous(breaks = 1:7, labels = names(stage_numeric_map)) +
+  labs(
+    x = "Hours Post Exposure (hpe)",
+    y = "Developmental Stage",
+    color = "Nominal Nickel (II) Chloride (mg/L)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 8),
+    legend.position = "bottom"
+  )
+
+dev.off()
+```
+
