@@ -1,0 +1,73 @@
+---
+title: "11-RNAseq-chemQA"
+output: html_document
+date: "2026-02-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ICPMS metadata
+Prep sheet
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/14dg0k715X9JVF_UUMuugrVUBXifQ8GEX4uhH5lp0m0I/export?exportFormat=csv | tee data/ICPMS_metadata.csv
+```
+
+```{r, engine='bash', eval=FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1RjzgxtYFF9E55EZWly6KwVVAl4Deo49C/export?exportFormat=csv | tee data/ICPMS_alldata.csv
+```
+
+Read in the data to your local R environment.
+
+```{r, eval=TRUE}
+setwd('..')
+metadata <- read.csv(file = "data/ICPMS_metadata.csv")  
+icpms <- read.csv(file = "data/ICPMS_alldata.csv")
+```
+
+```{r}
+library(dplyr)
+
+omics_merged <- metadata %>%
+  filter(Experiment == "omics") %>%
+  select(TubeLabel, Experiment, hpe, Nom.NiCl2.Conc., Rep, Date.Collected) %>%
+  left_join(
+    icpms %>%
+      select(
+        TubeLabel, Experiment,
+        X58_Ni_Conc_ug_l, X58_Ni_Conc_RSD,
+        X60_Ni_Conc_ug_l, X60_Ni_Conc_RSD
+      ),
+    by = c("TubeLabel", "Experiment")
+  ) %>%
+  mutate(X60_Ni_Conc_ug_l = as.numeric(X60_Ni_Conc_ug_l),
+         X58_Ni_Conc_ug_l = as.numeric(X58_Ni_Conc_ug_l),) %>%
+  mutate(ni60_mg_l = X60_Ni_Conc_ug_l/1000,
+         ni58_mg_L = X58_Ni_Conc_ug_l/1000)
+
+#check that what we need is numeric now
+summary(omics_merged)
+
+
+write_csv(omics_merged, file = "../data/omics_QAQC_chem.csv")
+```
+
+Calculate the fraction of ni in anhydrous nickel (II) chloride
+```{r}
+icpms_summary_omics <- omics_merged %>%
+  group_by(Nom.NiCl2.Conc.) %>%
+  summarise(
+    Ni60_mean_mg_L = mean(ni60_mg_l, na.rm = TRUE),
+    Ni60_sd_mg_L   = sd(ni60_mg_l, na.rm = TRUE),
+    Ni60_min_mg_L  = min(ni60_mg_l, na.rm = TRUE),
+    Ni60_max_mg_L  = max(ni60_mg_l, na.rm = TRUE),
+    n_icpms        = sum(!is.na(ni60_mg_l)),
+  )
+
+write_csv(icpms_summary_omics, file ="../data/omics_ICPMS_summary.csv")
+```
