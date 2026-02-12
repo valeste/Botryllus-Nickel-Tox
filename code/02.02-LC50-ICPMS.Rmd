@@ -152,20 +152,16 @@ survival_percent$NiCl2.Nom.Conc. <- as.numeric(survival_percent$NiCl2.Nom.Conc.)
 surv_24_96 <-subset(survival_percent, hpe %in% c(24, 96))
 ```
 
-
+for nominal nickel(II) chloride calculating 50% crude mortality lc50
 ```{r}
 # Calculate the slope and intersection points for each hpe group
 fit_data <- surv_24_96 %>%
-  filter(NiCl2.Nom.Conc.
- %in% c(100, 1000)) %>%
+  filter(NiCl2.Nom.Conc. %in% c(100, 1000)) %>%
   group_by(hpe) %>%
   summarize(
-    slope = (percentage_survivor[NiCl2.Nom.Conc.
- == 1000] - percentage_survivor[NiCl2.Nom.Conc.
- == 100]) / 
+    slope = (percentage_survivor[NiCl2.Nom.Conc. == 1000] -     percentage_survivor[NiCl2.Nom.Conc. == 100]) / 
             (1000 - 100),
-    intercept = percentage_survivor[NiCl2.Nom.Conc.
- == 100] - slope * 100,
+    intercept = percentage_survivor[NiCl2.Nom.Conc. == 100] - slope * 100,
     x_intercept50 = (50 - intercept) / slope,
     x_intercept90 = (90 - intercept) / slope,
     equation = paste("y = ", round(slope, 2), "x + ", round(intercept, 2))
@@ -179,7 +175,7 @@ surv_24_96 <- surv_24_96 %>%
 ### survival 24 and 96 hpe
 
 
-
+nominal nickel (II) chloride
 ```{r}
 setwd('..')
 png(filename = "output/survival_24_96_2025_nofacet.png", width = 900, height = 700)
@@ -190,10 +186,10 @@ ggplot(surv_24_96, aes(x = NiCl2.Nom.Conc., y = percentage_survivor, color = fac
   geom_point(aes(shape = factor(hpe)), size = 5) +
 
   # Lines connecting points
-  geom_line(aes(group = hpe), size = 1) +
+  geom_line(aes(group = hpe), size = 2) +
 
   # Manual color scale
-  scale_color_manual(values = c("black", "darkgray"), name = "hpe") +
+  scale_color_manual(values = c("lightblue", "darkblue"), name = "hpe") +
 
   # Manual shape scale: solid for 24, open for 96
   scale_shape_manual(values = c("24" = 16, "96" = 18), name = "hpe") +
@@ -226,19 +222,20 @@ ggplot(surv_24_96, aes(x = NiCl2.Nom.Conc., y = percentage_survivor, color = fac
   ) +
 
   # Labels for 50% survival
-  geom_label_repel(
-    data = fit_data,
-    aes(x = x_intercept50, y = 50, label = paste(round(x_intercept50), "mg/L")),
-    box.padding = unit(2, "lines"),
-    label.padding = unit(0.6, "lines"),
-    point.padding = unit(0.5, "lines"),
-    segment.size = 1,
-    size = 8,
-    color = "black",
-    nudge_x = 50,
-    nudge_y = 5,
-    show.legend = FALSE
-  ) +
+ # geom_label_repel(
+  #  data = fit_data,
+ #   aes(x = x_intercept50, y = 50, label = paste(round(x_intercept50), "mg/L")),
+ #   box.padding = unit(2, "lines"),
+ #   label.padding = unit(0.6, "lines"),
+  #  point.padding = unit(0.5, "lines"),
+ #   segment.size = 1,
+#    size = 8,
+#    color = "black",
+#    nudge_x = 50,
+ #   nudge_y = 5,
+ 
+  #   show.legend = FALSE
+#  ) +
 
   # 50% survival lines
   geom_segment(data = fit_data, 
@@ -252,3 +249,279 @@ ggplot(surv_24_96, aes(x = NiCl2.Nom.Conc., y = percentage_survivor, color = fac
 
 dev.off()
 ```
+
+# Nominal Ni Concentrations
+## Create new data frame for calculated values
+
+Calculate the fraction of ni in anhydrous nickel (II) chloride
+```{r}
+# atomic weights
+ni_aw <- 58.6934
+cl_aw <- 35.453
+
+# molar mass of NiCl2 (g/mol)
+nicl2_mw <- ni_aw + (2 * cl_aw)
+
+# fraction of Ni in NiCl2
+ni_fraction <- ni_aw / nicl2_mw
+ni_fraction
+
+```
+Calculates the amount of nominal nickel in the nominal concentrations of nickel(II) chloride anhydrous
+```{r}
+ni_conversion <- surv_24_96 %>%
+  dplyr::distinct(NiCl2.Nom.Conc.) %>%
+  dplyr::mutate(
+    Ni_mg_L = NiCl2.Nom.Conc. * ni_fraction
+  )
+```
+```{r}
+surv_24_96 <- surv_24_96 %>%
+  dplyr::left_join(ni_conversion, by = "NiCl2.Nom.Conc.")
+```
+
+```{r}
+# Calculate the slope and intersection points for each hpe group
+x1 <- 45.28832695 # calculated amount of ni in the 100 treatment
+x2 <- 452.88326952 # calculated amount of ni in the 1000 treatment
+
+fit_data_ni <- surv_24_96 %>%
+  dplyr::mutate(Ni_mg_L_r = round(Ni_mg_L, 6)) %>%
+  dplyr::filter(Ni_mg_L_r %in% round(c(x1, x2), 6)) %>%
+  dplyr::group_by(hpe) %>%
+  dplyr::summarise(
+    y1 = percentage_survivor[Ni_mg_L_r == round(x1, 6)],
+    y2 = percentage_survivor[Ni_mg_L_r == round(x2, 6)],
+    slope_ni = (y2 - y1) / (x2 - x1),
+    intercept_ni = y1 - slope_ni * x1,
+    x_intercept50_ni = (50 - intercept_ni) / slope_ni,
+    x_intercept90_ni = (90 - intercept_ni) / slope_ni,
+    equation_ni = paste0("y = ", round(slope_ni, 3), "x + ", round(intercept_ni, 2)),
+    .groups = "drop"
+  )
+
+
+# Merge the intersection data with the original data
+surv_24_96 <- surv_24_96 %>%
+  left_join(fit_data_ni, by = "hpe")
+```
+
+
+## nom ni plot
+```{r}
+setwd('..')
+png(filename = "output/nom_ni_survival_24_96_2025_nofacet.png", width = 900, height = 700)
+
+ggplot(surv_24_96, aes(x = Ni_mg_L, y = percentage_survivor, color = factor(hpe))) + 
+  
+  # Points with different shapes for 24h vs 96h
+  geom_point(aes(shape = factor(hpe)), size = 5) +
+
+  # Lines connecting points
+  geom_line(aes(group = hpe), size = 2) +
+
+  # Manual color scale
+  scale_color_manual(values = c("lightblue", "darkblue"), name = "hpe") +
+
+  # Manual shape scale: solid for 24, open for 96
+  scale_shape_manual(values = c("24" = 16, "96" = 18), name = "hpe") +
+
+  labs(x = "Nominal Nickel (mg/L)",
+       y = "Survival (%)") +
+
+  scale_y_continuous(breaks = seq(0, 100, by = 10), expand = c(0.02, 0.02)) +
+  scale_x_continuous(expand = c(0.02, 0.02)) +
+
+  theme_test() +
+  theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "white"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 20),
+    axis.text.y = element_text(size = 20, hjust = 1.2, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 20, vjust = 3, hjust = 0.5, margin = margin(t = 20)),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    strip.text = element_blank(),  
+    strip.background = element_blank(),
+    panel.spacing = unit(5, "lines")
+  ) +
+
+  # Labels for 50% survival
+ # geom_label_repel(
+  #  data = fit_data,
+ #   aes(x = x_intercept50, y = 50, label = paste(round(x_intercept50), "mg/L")),
+ #   box.padding = unit(2, "lines"),
+ #   label.padding = unit(0.6, "lines"),
+  #  point.padding = unit(0.5, "lines"),
+ #   segment.size = 1,
+#    size = 8,
+#    color = "black",
+#    nudge_x = 50,
+ #   nudge_y = 5,
+ 
+  #   show.legend = FALSE
+#  ) +
+
+  # 50% survival lines
+  geom_segment(data = fit_data_ni, 
+               aes(x = min(surv_24_96$Ni_mg_L), 
+                   xend = x_intercept50_ni, 
+                   y = 50, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1) +  
+  geom_segment(aes(x = x_intercept50_ni, 
+                   xend = x_intercept50_ni, 
+                   y = 0, yend = 50), 
+               linetype = "dashed", color = "red3", linewidth = 1)
+
+dev.off()
+```
+
+# ICPMS measured Ni
+## create new data frame
+```{r}
+icpms_summary <- icpms %>%
+  group_by(NiCl2.Nom.Conc.) %>%
+  summarise(
+    Ni_mean_mg_L = mean(Ni.mg.L, na.rm = TRUE),
+    Ni_sd_mg_L   = sd(Ni.mg.L, na.rm = TRUE),
+    Ni_min_mg_L  = min(Ni.mg.L, na.rm = TRUE),
+    Ni_max_mg_L  = max(Ni.mg.L, na.rm = TRUE),
+    n_icp        = sum(!is.na(Ni.mg.L)),
+    .groups = "drop"
+  )
+
+library(dplyr)
+
+# 1) Summarize measured Ni (ICP-MS) by nominal NiCl2
+icpms_summary <- icpms %>%
+  group_by(NiCl2.Nom.Conc.) %>%
+  summarise(
+    Ni_mean_mg_L = mean(Ni.mg.L, na.rm = TRUE),
+    Ni_sd_mg_L   = sd(Ni.mg.L, na.rm = TRUE),
+    Ni_min_mg_L  = min(Ni.mg.L, na.rm = TRUE),
+    Ni_max_mg_L  = max(Ni.mg.L, na.rm = TRUE),
+    n_icp        = sum(!is.na(Ni.mg.L)),
+    .groups = "drop"
+  )
+
+# 2) Join onto survival dataframe
+surv_24_96_icpms <- surv_24_96 %>%
+  left_join(icpms_summary, by = "NiCl2.Nom.Conc.")
+ 
+surv_24_96_icpms %>%
+  distinct(NiCl2.Nom.Conc., Ni_mean_mg_L, Ni_min_mg_L, Ni_max_mg_L, n_icp) %>%
+  arrange(NiCl2.Nom.Conc.)
+
+```
+
+```{r}
+fit_data_measNi <- surv_24_96_icpms %>%
+  filter(NiCl2.Nom.Conc. %in% c(100, 1000)) %>%
+  group_by(hpe) %>%
+  summarise(
+    x1 = Ni_mean_mg_L[NiCl2.Nom.Conc. == 100],
+    x2 = Ni_mean_mg_L[NiCl2.Nom.Conc. == 1000],
+    y1 = percentage_survivor[NiCl2.Nom.Conc. == 100],
+    y2 = percentage_survivor[NiCl2.Nom.Conc. == 1000],
+
+    slope_measNi = (y2 - y1) / (x2 - x1),
+    intercept_measNi = y1 - slope_measNi * x1,
+
+    x_intercept50_measNi = (50 - intercept_measNi) / slope_measNi,
+    x_intercept90_measNi = (90 - intercept_measNi) / slope_measNi,
+
+    equation_measNi = paste0(
+      "y = ", round(slope_measNi, 3), "x + ", round(intercept_measNi, 2)
+    ),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+setwd('..')
+png(filename = "output/icpms_ni_survival_24_96_2025_nofacet.png", width = 900, height = 700)
+
+ggplot(surv_24_96_icpms, aes(x = Ni_mean_mg_L, y = percentage_survivor, color = factor(hpe))) + 
+  
+  # (Optional) show ICP-MS range for each nominal group as horizontal bars
+  # Comment out if you don't want it
+  #geom_errorbarh(
+  #  aes(xmin = Ni_min_mg_L, xmax = Ni_max_mg_L),
+#    height = 0, linewidth = 1, alpha = 0.7
+ # ) +
+
+  # Points with different shapes for 24h vs 96h
+  geom_point(aes(shape = factor(hpe)), size = 5) +
+
+  # Lines connecting points
+  geom_line(aes(group = hpe), size = 2) +
+
+  # Manual color scale
+  scale_color_manual(values = c("lightblue", "darkblue"), name = "hpe") +
+
+  # Manual shape scale
+  scale_shape_manual(values = c("24" = 16, "96" = 18), name = "hpe") +
+
+  labs(
+    x = "Nickel-60 (mg/L), Measured with ICP-MS",
+    y = "Colony Survival (%)"
+  ) +
+
+  scale_y_continuous(breaks = seq(0, 100, by = 10), expand = c(0.02, 0.02)) +
+  scale_x_continuous(breaks = seq(0, 300, by = 25), expand = c(0.02, 0.02)) +
+
+  theme_test() +
+  theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "white"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 20),
+    axis.text.y = element_text(size = 20, hjust = 1.2, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 20, vjust = 3, hjust = 0.5, margin = margin(t = 20)),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    strip.text = element_blank(),  
+    strip.background = element_blank(),
+    panel.spacing = unit(5, "lines")
+  ) +
+
+  # 50% survival horizontal line: from min measured Ni to the 50% x-intercept (per hpe)
+  geom_segment(
+    data = fit_data_measNi,
+    aes(
+      x = min(surv_24_96_icpms$Ni_mean_mg_L, na.rm = TRUE),
+      xend = x_intercept50_measNi,
+      y = 50, yend = 50
+    ),
+    linetype = "dashed", color = "red3", linewidth = 1,
+    inherit.aes = FALSE
+  ) +
+
+  # 50% survival vertical line at the x-intercept (per hpe)
+  geom_segment(
+    data = fit_data_measNi,
+    aes(
+      x = x_intercept50_measNi, xend = x_intercept50_measNi,
+      y = 0, yend = 50
+    ),
+    linetype = "dashed", color = "red3", linewidth = 1,
+    inherit.aes = FALSE
+  )
+dev.off()
+```
+
+
