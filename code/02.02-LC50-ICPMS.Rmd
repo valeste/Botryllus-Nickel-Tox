@@ -286,10 +286,10 @@ x1 <- 45.28832695 # calculated amount of ni in the 100 treatment
 x2 <- 452.88326952 # calculated amount of ni in the 1000 treatment
 
 fit_data_ni <- surv_24_96 %>%
-  dplyr::mutate(Ni_mg_L_r = round(Ni_mg_L, 6)) %>%
-  dplyr::filter(Ni_mg_L_r %in% round(c(x1, x2), 6)) %>%
-  dplyr::group_by(hpe) %>%
-  dplyr::summarise(
+  mutate(Ni_mg_L_r = round(Ni_mg_L, 6)) %>%
+  filter(Ni_mg_L_r %in% round(c(x1, x2), 6)) %>%
+  group_by(hpe) %>%
+  summarise(
     y1 = percentage_survivor[Ni_mg_L_r == round(x1, 6)],
     y2 = percentage_survivor[Ni_mg_L_r == round(x2, 6)],
     slope_ni = (y2 - y1) / (x2 - x1),
@@ -397,19 +397,7 @@ icpms_summary <- icpms %>%
     .groups = "drop"
   )
 
-library(dplyr)
 
-# 1) Summarize measured Ni (ICP-MS) by nominal NiCl2
-icpms_summary <- icpms %>%
-  group_by(NiCl2.Nom.Conc.) %>%
-  summarise(
-    Ni_mean_mg_L = mean(Ni.mg.L, na.rm = TRUE),
-    Ni_sd_mg_L   = sd(Ni.mg.L, na.rm = TRUE),
-    Ni_min_mg_L  = min(Ni.mg.L, na.rm = TRUE),
-    Ni_max_mg_L  = max(Ni.mg.L, na.rm = TRUE),
-    n_icp        = sum(!is.na(Ni.mg.L)),
-    .groups = "drop"
-  )
 
 # 2) Join onto survival dataframe
 surv_24_96_icpms <- surv_24_96 %>%
