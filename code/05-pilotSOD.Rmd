@@ -35,13 +35,24 @@ Make sure you have made your Google sheet publicly available to anyone that has 
 I apologize for not making a relative path. Just modify what is after "tee" to your own directory path.
 
 ```{r, engine='bash', eval=FALSE}
-curl -L https://docs.google.com/spreadsheets/d/1vNxX2tBdEa0Ibyd4mFdru5sAZx0aipv37-y-hkqvJq4/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/SOD.csv
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1vNxX2tBdEa0Ibyd4mFdru5sAZx0aipv37-y-hkqvJq4/export?exportFormat=csv | tee data/SOD.csv
 ```
-## BCA Data
+## BCA Data No Raw Absorbance
 
 ```{r, engine='bash', eval = FALSE}
+cd ..
 
-curl -L https://docs.google.com/spreadsheets/d/1mKhd95gn_tith8fJbYjX3jGyrO-Y4mWKCoCKdTVZFHY/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/BCA.csv
+curl -L https://docs.google.com/spreadsheets/d/1mKhd95gn_tith8fJbYjX3jGyrO-Y4mWKCoCKdTVZFHY/export?exportFormat=csv | tee data/BCA_noRawAbs.csv
+```
+
+## BCA Data Raw Absorbance
+
+```{r, engine='bash', eval = FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/180-3tk6UJCAyGFkj0JzIqdBfeG5nf0S4BTjKkK0sou8/export?exportFormat=csv | tee data/BCA_RawAbs.csv
 ```
 
 ## Metadata
@@ -49,15 +60,18 @@ curl -L https://docs.google.com/spreadsheets/d/1mKhd95gn_tith8fJbYjX3jGyrO-Y4mWK
 Mostly it has the homogenization number and tunicate ID. We are gonna merge this with the other data frames.
 
 ```{r, engine='bash'}
-curl -L https://docs.google.com/spreadsheets/d/1eDGpgtTB_yBolNCtSxVU2U_oajdm3Oi7guIREc7asRc/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/metadata.csv
+cd ..
+curl -L https://docs.google.com/spreadsheets/d/1eDGpgtTB_yBolNCtSxVU2U_oajdm3Oi7guIREc7asRc/export?exportFormat=csv | tee data/metadata.csv
 ```
+
 ## Blastogenic Data
 ```{r, engine='bash'}
-curl -L https://docs.google.com/spreadsheets/d/1JtJO3EX06BYK4pYwZZ7b7ZCoTyZcAeuTRka_9kA-yPk/export?exportFormat=csv | tee /Users/valeste/Documents/Git/Botryllus-Nickel-Tox/data/morph.csv
+cd ..
+curl -L https://docs.google.com/spreadsheets/d/1JtJO3EX06BYK4pYwZZ7b7ZCoTyZcAeuTRka_9kA-yPk/export?exportFormat=csv | tee data/morph.csv
 ```
 
 
-# QAQC data
+## QAQC data
 
 Will need to exclude as they were not processed in assay:
 - DM042024_C02 (1 mg/L condition) declined in health.
@@ -79,37 +93,307 @@ Per treatment there should be:
 
 - 48 "observations" for the BCA assay
 
-## SOD
+# SOD
 
 ```{r}
 setwd('..')
 sod <- read.csv(file = "data/SOD.csv")
 ```
+```{r}
+sod_std_key <- tibble::tribble(
+  ~standard, ~known_sod_u_ml,
+  2, 2,
+  3, 1,
+  4, 0.5,
+  5, 0.25,
+  6, 0.125,
+  7, 0.0625,
+  8, 0
+)
+
+sod <- sod %>%
+  left_join(
+    sod_std_key,
+    by = c("homogenate" = "standard")
+  ) %>%
+  mutate(
+    known_sod_u_ml = if_else(type == "standard", known_sod_u_ml, NA_real_)
+  )
+```
+
+## Calculate SOD from raw absorbance
+```{r}
+# take the adjusted raw values from pre and post incubation with the xan ox solubalization agent
+sod <- sod %>%
+  mutate(
+    delta_abs = post_xan_ox_abs450 - pre_xan_ox_abs450
+  )
+```
+
+
 
 ```{r}
-sod$hom_num <- as.numeric(gsub("Hom (\\d+) .*", "\\1", sod$well_content)) # adding in new column to extract homogenate number based off what was written in the plate map
+# take the average of each tech rep of the blank (std 8 = 0 u/mL) standard per plate
+blank_df <- sod %>%
+  filter(type == "standard",
+         known_sod_u_ml == 0) %>%
+  group_by(plate) %>%
+  summarise(blank_delta = mean(delta_abs, na.rm = TRUE), .groups = 'drop')
 
-#let's take a peak
-head(sod)
+# put the average blank for each plate in the main sod data frame
+sod <- sod %>%
+  left_join(blank_df, by="plate")
 
-summary(sod) ## Missing 4 entries for the 1 mg/L treatment. Find out which those are and why.
+
+# here we take the average blank and then do average blank - tech rep of blank <- which is not zero 
+# apparently this method of average blank - tech rep of blank is more statistically robust
+sod <- sod %>%
+  mutate(blank_corrected_abs = delta_abs - blank_delta)
+
+
+sod %>%
+  filter(type == "standard", known_sod_u_ml == 0) %>%
+  group_by(plate) %>%
+  summarise(
+    mean_blank_corrected = mean(blank_corrected_abs, na.rm = TRUE),
+    sd_blank_corrected = sd(blank_corrected_abs, na.rm = TRUE),
+    .groups = "drop"
+  )
+# the mean_blank_corrected should be 0 or close to 0
 ```
-## BCA
+## SOD standard curve
+```{r}
+# create a data frame for only the sod standards
+std_df <- sod %>%
+  filter(type == "standard",
+         !is.na(known_sod_u_ml))
+
+std_df %>%
+  select(well_content, known_sod_u_ml, blank_corrected_abs) %>%
+  head()
+
+
+# now plot the blank-corrected standards 
+ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
+  geom_point(size = 3) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Known SOD (U/mL)",
+    y = "Blank-corrected ΔA450"
+  )
+
+```
+
+
+## line of best fit for std
+```{r}
+
+ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
+  geom_point(size = 3) +
+  stat_smooth(
+    data = std_df %>% filter(known_sod_u_ml > 0),
+    method = "lm",
+    formula = y ~ log(x),
+    se = FALSE,
+    linewidth = 1
+  ) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Known SOD (U/mL)",
+    y = "Blank-corrected ΔA450"
+  )
+
+sod_fit <- lm(
+  blank_corrected_abs ~ log(known_sod_u_ml),
+  data = std_df %>% filter(known_sod_u_ml > 0)
+)
+
+a_coef_sod <- coef(sod_fit)[1]
+b_coef_sod <- coef(sod_fit)[2]
+
+```
+
+## SOD Calculation in R
+```{r}
+# calculate sod for all wells
+sod <- sod %>%
+  mutate(
+    sod_u_ml_calc = exp((blank_corrected_abs - a_coef_sod)/b_coef_sod)
+  )
+
+
+# calculate based off dilution correction (1:3)
+sod <- sod %>%
+  mutate(
+    dilution_numeric = if_else(
+      dilution_factor_unknownsample_pbs == "1:3", 3, 1
+    ),
+    sod_u_ml_final = sod_u_ml_calc * dilution_numeric
+  )
+
+sod %>%
+  filter(type == "standard") %>%
+  select(well_content, known_sod_u_ml, sod_u_ml_calc) %>%
+  arrange(known_sod_u_ml)
+
+```
+
+Check that the model fit our data correctly 
+```{r}
+summary(sod_fit)
+# high R^2 at 0.952 so strong fit
+
+sod_summary <- sod %>%
+  filter(type == "unknown") %>%
+  group_by(plate, homogenate) %>%
+  summarise(
+    mean_sod = mean(sod_u_ml_final, na.rm = TRUE),
+    sd_sod = sd(sod_u_ml_final, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+setwd( '..' )
+write.csv(sod, "data/sod_all_wells_with_calculatedR_activity.csv", row.names = FALSE)
+write.csv(sod_summary, "data/sod_homogenate_meansR.csv", row.names = FALSE)
+```
+
+
+
+# BCA
 ```{r}
 setwd('..')
-bca <- read.csv(file = "data/BCA.csv")
+bca_raw <- read.csv(file = "data/BCA_RawAbs.csv")
+bca_noRaw <-read.csv(file = "data/BCA_noRawAbs.csv")
+
+bca <- full_join(bca_noRaw, bca_raw, by = c("well_content", "plate", "type", "assay_date", "assay"))
+
+# extract the standard name and place in the homogenate column
+bca <- bca %>%
+  mutate(
+    homogenate = as.character(homogenate),
+    homogenate = if_else(
+      type == "standard",
+      str_extract(well_content, "^[A-Za-z]"),
+      homogenate
+    )
+  )
 ```
 
+## BCA standard curve
+```{r}
+# create a standard key
+bca_std_key <- tibble::tribble(
+  ~standard, ~known_mg_ml,
+  "A", 0,
+  "B", 0.1,
+  "C", 0.2,
+  "D", 0.4,
+  "E", 0.8,
+  "F", 1.2,
+  "G", 1.6,
+  "H", 2
+)
+
+bca <- bca %>%
+  left_join(bca_std_key, by = c("homogenate" = "standard")) %>%
+  mutate(known_mg_ml = if_else(type == "standard", known_mg_ml, NA_real_))
+
+
+
+```
+
+
+calculate the average blank absorbance value for each plate
+```{r}
+bca_blank_df <- bca %>%
+  filter(type == "standard", known_mg_ml == 0) %>%   # 'A' standard
+  group_by(plate) %>%
+  summarise(bca_blank_abs = mean(abs562, na.rm = TRUE), .groups = "drop")
+
+```
+add that average blank absorbance value and the blank corrected absorbance value for each unknown homogenate
+```{r}
+bca <- bca %>%
+  left_join(bca_blank_df, by = "plate") %>%
+  mutate(abs562_blankcorr = abs562 - bca_blank_abs)
+```
 
 ```{r}
-bca$hom_num <- as.numeric(gsub("Hom (\\d+) .*", "\\1", bca$well_content)) # adding in new column to extract homogenate number based off what was written in the plate map
+# make sure to drop the na for standard D tech rep 3 of plate 1
+bca_std_df <- bca %>%
+  filter(type == "standard", !is.na(known_mg_ml)) %>%
+  filter(!is.na(abs562), !is.na(abs562_blankcorr))
 
-#let's take a peak
-head(bca)
 
-summary(bca) ## Missing 4 entries for the 1 mg/L treatment. Find out which those are and why.
+ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562)) +
+  geom_point(size = 3) +
+  theme_classic(base_size = 14) +
+  labs(x = "BSA standard (mg/mL)", y = "Absorbance @562")
 ```
 
+
+Create a linear model to fit standard and unknown data
+```{r}
+# this will drop the 0 for our linear model so that there is no issue in the math
+bca_fit0 <- lm(abs562_blankcorr ~ 0 + known_mg_ml, data = bca_std_df)
+summary(bca_fit0)
+
+
+ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562)) +
+  geom_point(size=3) +
+  stat_smooth(method="lm", se=FALSE, color="red") +
+  theme_classic()
+
+```
+
+```{r}
+b_slope_bca <- coef(bca_fit0)[1]   # this is 1.28361-ish
+
+bca <- bca %>%
+  mutate(
+    protein_mg_ml_calc  = abs562_blankcorr / b_slope_bca,
+    protein_mg_ml_final = protein_mg_ml_calc * 4
+  )
+
+
+bca %>%
+  filter(type=="standard") %>%
+  select(homogenate, known_mg_ml, protein_mg_ml_calc) %>%
+  arrange(known_mg_ml)
+# the protien calc should match that of the known standards
+
+bca %>%
+  filter(type=="standard") %>%
+  ggplot(aes(x = known_mg_ml, y = protein_mg_ml_calc)) +
+  geom_point(size=3) +
+  geom_abline(slope=1, intercept=0, linetype="dashed", color="red") +
+  theme_classic() +
+  labs(x="True mg/mL", y="Calculated mg/mL")
+```
+
+```{r}
+bca_summary <- bca %>%
+  filter(type == "unknown") %>%
+  mutate(homogenate = as.numeric(homogenate)) %>%
+  group_by(plate, homogenate) %>%
+  summarise(
+    mean_protein_mg_ml = mean(protein_mg_ml_final, na.rm = TRUE),
+    sd_protein_mg_ml   = sd(protein_mg_ml_final, na.rm = TRUE),
+    n = sum(!is.na(protein_mg_ml_final)),
+    .groups = "drop"
+  )
+
+
+```
+
+
+
+
+#Blastogenic stage & metadata
 ```{r}
 setwd('..')
 blast <- read.csv("data/LC50.csv")
@@ -133,49 +417,30 @@ setwd('..')
 metadata <- read.csv("data/metadata.csv")
 ```
 
-In the BCA data frame, we are missing the hpe associated with the each sample. We can add this on to a new data frame that also combines it with the SOD data after we take the averages and standard errors of the technical replicates of the BCA assay.
+In the BCA and SOD data frame, we are missing the hpe associated with the each sample. We can add this on to a new data frame that also combines it with the SOD data after we take the averages and standard errors of the technical replicates of the BCA assay.
 
 ::: {.callout-note}
 Note that as of July 3, 2024, the data set for the 10 mg/L is incomplete in this data frame and should be taken with a grain of salt or removed from the data frame below. The 0 mg/L treatment is also incomplete with homogenate 37 needing to be re-evaluated.
 :::
 
-# Data Munging!
 
-## Average assays' technical replicates
 
-Get the mean and standard error of the technical replicates for SOD:
+#Data Munging to combine data frames!
 
-```{r}
-df_avg_sod <- sod %>%
-  group_by(hom_num) %>%
-  summarize(
-    sod_avg = mean(sod_calc, na.rm = TRUE),
-    sod_se = sd(sod_calc, na.rm = TRUE) / sqrt(n())
-  ) %>%
-  mutate(hom_num = as.factor(hom_num))
-
-summary(df_avg_sod)
-```
-
-```{r}
-df_avg_bca <- bca %>%
-  group_by(hom_num) %>%
-  summarize(
-    bca_avg = mean(protein_conc.mg.mL, na.rm = TRUE),
-    bca_se = sd(protein_conc.mg.mL, na.rm = TRUE) / sqrt(n())
-  ) %>%
-  mutate(hom_num = as.factor(hom_num))
-
-summary(df_avg_bca) # note that we have an extra entry here for homogenate 37 that has yet to be processed for SOD assay
-```
-
+Modify SOD metadata to merge with other data frames more easily
 ```{r}
 metadata <- metadata %>%
-  select(hom_num, Tunicate.ID, date, hpe, NiCl2.Nom.Conc., true_rep, rep_exp) %>%
+  rename(homogenate = hom_num) %>%   # rename column first
+  select(homogenate, Tunicate.ID, date, hpe, NiCl2.Nom.Conc., true_rep, rep_exp) %>%
   mutate(NiCl2.Nom.Conc. = as.factor(NiCl2.Nom.Conc.)) %>%
   mutate(hpe = as.factor(hpe)) %>%
-  mutate(hom_num = as.factor(hom_num))
+  mutate(homogenate = as.factor(homogenate))
+
 summary(metadata)
+
+metadata2 <- metadata %>%
+  mutate(homogenate = as.numeric(as.character(homogenate))) # change to numeric for merging data frames
+
 ```
 
 ::: {.callout-note}
@@ -183,15 +448,38 @@ The column sod_avg is in activity units/mL and the column bca_avg is in mg/mL.
 :::
 
 ```{r}
-combo <- inner_join(metadata, df_avg_bca, by = c("hom_num"))
-combo <- inner_join(combo, df_avg_sod, by = c("hom_num"))
-combo <- inner_join(combo, blast, by = c("Tunicate.ID", "NiCl2.Nom.Conc.", "hpe"))
-summary(combo)
+assay_combo <- bca_summary %>%
+  full_join(sod_summary, by = c("homogenate")) %>%
+   rename(
+    n_bca = n.x,
+    n_sod = n.y,
+    plate_bca = plate.x,
+    plate_sod = plate.y
+  )
+
+assay_combo <- assay_combo %>%
+  mutate(
+    sod_u_mg = mean_sod / mean_protein_mg_ml
+  )
+
+```
+
+```{r}
+combo_metadata <- assay_combo %>%
+  full_join(metadata2, by = "homogenate")
+```
+
+ok combine with blastogenic data
+```{r}
+combo <- combo_metadata %>%
+  left_join(
+    blast,
+    by = c("Tunicate.ID", "NiCl2.Nom.Conc.", "hpe")
+  )
 ```
 
 ```{r}
 combo <- combo %>%
-  mutate(sod_u_mg = sod_avg / bca_avg) %>%
   filter(!is.na(sod_u_mg)) %>%
   filter(NiCl2.Nom.Conc. != 10) 
 summary(combo)
@@ -224,9 +512,8 @@ summary(combo96)
 
 
 
+
 # Exploratory Plots
-
-
 ```{r}
 
 ggplot(combo24, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
@@ -271,7 +558,7 @@ ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
 
 Note that the plot below is the unormalized data. A BCA was run on the samples as well to quantify total protein content.
 ```{r, eval=TRUE}
-ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_avg, fill = NiCl2.Nom.Conc.)) +
+ggplot(combo, aes(x = NiCl2.Nom.Conc., y = mean_sod, fill = NiCl2.Nom.Conc.)) +
   geom_point() +
   geom_violin(trim = FALSE) +
   facet_wrap(~ hpe, scales = "free_y") +
@@ -296,7 +583,7 @@ Fancy kruskil-wallis done in plot, no need to use
 ```{r}
 library(ggstatsplot)
 setwd('..')
-png(filename = "output/violin_sod_krusk.png", width = 1800, height = 800)
+png(filename = "output/violin_sod_krusk_wilcoxn_hompcorrection.png", width = 1800, height = 1800)
 grouped_ggbetweenstats(
   data = combo,
   x = NiCl2.Nom.Conc.,
@@ -304,13 +591,18 @@ grouped_ggbetweenstats(
   grouping.var = hpe,
   type = "all",
   outlier.tagging = TRUE,
-  xlab = "Nickel Concentration mg/L",
+  xlab = "Nominal NiCl2 (mg/L)",
   ylab = "SOD1 U/mg",
-  pairwise.display = "non-significant",
+  pairwise.display = "all",
   results.subtitle = FALSE,
   digits = 2L,
   package = "wesanderson", ## package from which color palette is to be taken
   palette = "Moonrise3",  
+   ggsignif.args = list(
+    textsize = 10,      # this controls the text size of the pairwise comparisons
+    tip_length = 0.1,
+    step_increase = 0.2
+  ),
   point.args = list(
     alpha = 1,
     size = 10),
@@ -322,8 +614,8 @@ grouped_ggbetweenstats(
     nudge_y = 9),
   ggplot.component = list (
     ggplot2::scale_y_continuous(
-    breaks = seq(0, 40, by = 10),
-    limits = (c(0, 40))),
+    breaks = seq(0, 6, by = 0.5),
+    limits = (c(0, 6))),
     theme(
     axis.ticks = element_blank(),
     axis.line = element_line(colour = "grey50"),
@@ -374,7 +666,7 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
   # Optional: median line inside each violin
   stat_summary(fun = median, geom = "crossbar", width = 0.6, fatten = 0) +
   facet_wrap(~ hpe, nrow = 1) +
-  scale_y_continuous(breaks = seq(0, 40, by = 10), limits = c(0, 40), expand = c(0.2, 0)) +
+  scale_y_continuous(breaks = seq(0, 5, by = 1), limits = c(0, 5), expand = c(0.2, 0)) +
   labs(x = "Nickel (II) Chloride Concentration (mg/L)", y = "SOD1 (U/mg)") +
   geom_text(
   data = n_counts,
@@ -403,19 +695,22 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
 
 
 ```
-Just boxplot, Final Figure 
+# Just boxplot, Final Figure 
 
 ```{r}
-png(filename = "../output/boxplot_sod.png", width = 1300, height = 850)
+png(filename = "../output/boxplot_sod_RnormalizedBCA.png", width = 1300, height = 850)
 ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
   geom_boxplot(width = 0.7, outlier.shape = NA, alpha = 0.6) +
-  geom_jitter(width = 0.12, height = 0, size = 4, alpha = 0.9) +
+  geom_jitter(width = 0.01, height = 0, size = 4, alpha = 0.9,
+              aes(color = simple_stage)) +
   stat_summary(fun = median, geom = "point", size = 4, color="blue") +
   facet_wrap(~ hpe, nrow = 1,
              labeller = labeller(
     hpe = function(x) paste0(x, " hpe"))) +
-  scale_y_continuous(breaks = seq(0, 40, by = 10), limits = c(0, 40), expand = c(0.05, 0.1)) +
-  labs(x = "Nickel (II) Chloride Concentration (mg/L)", y = "Median SOD1 Activity (U/mg protein)") +
+  scale_y_continuous(breaks = seq(0, 5, by = 0.5), limits = c(0, 5), expand = c(0.05, 0.1)) +
+  labs(x = "Nickel (II) Chloride Concentration (mg/L)", 
+       y = "SOD1 Activity (U/mg protein)",
+       color = "Stage") +
   geom_text(
   data = n_counts,
   aes(x = NiCl2.Nom.Conc., y = 0, label = paste0("n=", n)),
