@@ -55,6 +55,14 @@ cd ..
 curl -L https://docs.google.com/spreadsheets/d/180-3tk6UJCAyGFkj0JzIqdBfeG5nf0S4BTjKkK0sou8/export?exportFormat=csv | tee data/BCA_RawAbs.csv
 ```
 
+## Pierce 660
+```{r, engine='bash', eval = FALSE}
+cd ..
+
+curl -L https://docs.google.com/spreadsheets/d/1Y7fSSzmRqMN0mAn8XsuSnGjiY0sSJq9Xlz2RJjMxYwM/export?exportFormat=csv | tee data/pierce660_1to4dilution.csv
+```
+
+
 ## Metadata
 
 Mostly it has the homogenization number and tunicate ID. We are gonna merge this with the other data frames.
@@ -99,6 +107,7 @@ Per treatment there should be:
 setwd('..')
 sod <- read.csv(file = "data/SOD.csv")
 ```
+
 ```{r}
 sod_std_key <- tibble::tribble(
   ~standard, ~known_sod_u_ml,
@@ -172,9 +181,13 @@ std_df %>%
   select(well_content, known_sod_u_ml, blank_corrected_abs) %>%
   head()
 
+# remove the blank
+sod_std_df <- std_df %>%
+  filter(type == "standard", known_sod_u_ml > 0)
 
 # now plot the blank-corrected standards 
 ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
+  facet_wrap(~plate)+
   geom_point(size = 3) +
   theme_classic(base_size = 14) +
   labs(
@@ -188,13 +201,41 @@ ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
 ## line of best fit for std
 ```{r}
 
+sod_coefs <- sod_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(blank_corrected_abs ~ log(known_sod_u_ml), data = .)
+    tibble(
+      a_coef_sod = coef(fit)[1],
+      b_coef_sod = coef(fit)[2]
+    )
+  }) %>%
+  ungroup()
+
+sod <- sod %>%
+  left_join(sod_coefs, by = "plate")
+
+# visual confirmation of line of best fit
+# make smooth x values for plotting lines
+sod_lines <- sod_coefs %>%
+  crossing(
+    known_sod_u_ml = seq(
+      min(std_df$known_sod_u_ml[std_df$known_sod_u_ml > 0]),
+      max(std_df$known_sod_u_ml),
+      length.out = 200
+    )
+  ) %>%
+  mutate(
+    pred_abs = a_coef_sod + b_coef_sod * log(known_sod_u_ml)
+  )
+
 ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
+  facet_wrap(~plate) +
   geom_point(size = 3) +
-  stat_smooth(
-    data = std_df %>% filter(known_sod_u_ml > 0),
-    method = "lm",
-    formula = y ~ log(x),
-    se = FALSE,
+  geom_line(
+    data = sod_lines,
+    aes(x = known_sod_u_ml, y = pred_abs),
+    color = "red",
     linewidth = 1
   ) +
   theme_classic(base_size = 14) +
@@ -203,45 +244,29 @@ ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
     y = "Blank-corrected ΔA450"
   )
 
-sod_fit <- lm(
-  blank_corrected_abs ~ log(known_sod_u_ml),
-  data = std_df %>% filter(known_sod_u_ml > 0)
-)
-
-a_coef_sod <- coef(sod_fit)[1]
-b_coef_sod <- coef(sod_fit)[2]
-
 ```
 
 ## SOD Calculation in R
 ```{r}
-# calculate sod for all wells
 sod <- sod %>%
   mutate(
-    sod_u_ml_calc = exp((blank_corrected_abs - a_coef_sod)/b_coef_sod)
+    sod_u_ml_calc = exp((blank_corrected_abs - a_coef_sod) / b_coef_sod)
   )
 
-
-# calculate based off dilution correction (1:3)
+# adjust by dilution factor to get final sod concentration 
 sod <- sod %>%
   mutate(
-    dilution_numeric = if_else(
-      dilution_factor_unknownsample_pbs == "1:3", 3, 1
-    ),
-    sod_u_ml_final = sod_u_ml_calc * dilution_numeric
+    dilution_n = as.numeric(str_match(dilution_factor_unknownsample_pbs, "1:(\\d+(?:\\.\\d+)?)")[,2]),
+    sod_u_ml_final = if_else(
+      type == "unknown" & !is.na(dilution_n),
+      sod_u_ml_calc * dilution_n,
+      sod_u_ml_calc
+    )
   )
-
-sod %>%
-  filter(type == "standard") %>%
-  select(well_content, known_sod_u_ml, sod_u_ml_calc) %>%
-  arrange(known_sod_u_ml)
-
 ```
 
 Check that the model fit our data correctly 
 ```{r}
-summary(sod_fit)
-# high R^2 at 0.952 so strong fit
 
 sod_summary <- sod %>%
   filter(type == "unknown") %>%
@@ -329,34 +354,50 @@ bca_std_df <- bca %>%
   filter(!is.na(abs562), !is.na(abs562_blankcorr))
 
 
-ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562)) +
+ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562_blankcorr)) +
+  facet_wrap(~plate) +
   geom_point(size = 3) +
+  geom_smooth(method = "lm",
+              formula = y ~ 0 + x,
+              se = FALSE,
+              color = "blue",
+              linewidth = 1.2) +
   theme_classic(base_size = 14) +
-  labs(x = "BSA standard (mg/mL)", y = "Absorbance @562")
+  labs(
+    x = "BSA standard (mg/mL)",
+    y = "Blank-corrected absorbance @562"
+  )
+
 ```
 
 
 Create a linear model to fit standard and unknown data
 ```{r}
-# this will drop the 0 for our linear model so that there is no issue in the math
-bca_fit0 <- lm(abs562_blankcorr ~ 0 + known_mg_ml, data = bca_std_df)
-summary(bca_fit0)
+bca_coefs <- bca_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs562_blankcorr ~ 0 + known_mg_ml, data = .)
+    tibble(b_slope_bca = coef(fit)[1])
+  }) %>%
+  ungroup()
 
+bca_coefs
 
-ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562)) +
-  geom_point(size=3) +
-  stat_smooth(method="lm", se=FALSE, color="red") +
-  theme_classic()
+bca <- bca %>%
+  left_join(bca_coefs, by = "plate")
+
 
 ```
 
 ```{r}
-b_slope_bca <- coef(bca_fit0)[1]   # this is 1.28361-ish
-
 bca <- bca %>%
   mutate(
-    protein_mg_ml_calc  = abs562_blankcorr / b_slope_bca,
-    protein_mg_ml_final = protein_mg_ml_calc * 4
+    protein_mg_ml_calc = abs562_blankcorr / b_slope_bca,
+    protein_mg_ml_final = if_else(
+      type == "unknown",
+      protein_mg_ml_calc * 4,   # your 1:4 dilution
+      protein_mg_ml_calc        # standards: leave as-is
+    )
   )
 
 
@@ -369,11 +410,64 @@ bca %>%
 bca %>%
   filter(type=="standard") %>%
   ggplot(aes(x = known_mg_ml, y = protein_mg_ml_calc)) +
+  facet_wrap(~plate)+
   geom_point(size=3) +
   geom_abline(slope=1, intercept=0, linetype="dashed", color="red") +
   theme_classic() +
   labs(x="True mg/mL", y="Calculated mg/mL")
 ```
+
+```{r}
+bca_fit_stats <- bca_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs562_blankcorr ~ 0 + known_mg_ml, data = .)
+    s <- summary(fit)
+
+    tibble(
+      slope = coef(fit)[1],
+      r_squared = s$r.squared,
+      adj_r_squared = s$adj.r.squared,
+      residual_se = s$sigma
+    )
+  }) %>%
+  ungroup()
+
+```
+
+```{r}
+# coefficients per plate (with intercept) comapre for sanity check that we should force the model through (0,0)
+bca_coefs_intercept <- bca_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs562_blankcorr ~ known_mg_ml, data = .)
+    tibble(
+      intercept = coef(fit)[1],
+      slope     = coef(fit)[2]
+    )
+  }) %>%
+  ungroup()
+
+bca_fit_stats_intercept <- bca_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs562_blankcorr ~ known_mg_ml, data = .)
+    s <- summary(fit)
+
+    tibble(
+      intercept     = coef(fit)[1],
+      slope         = coef(fit)[2],
+      r_squared     = s$r.squared,
+      adj_r_squared = s$adj.r.squared,
+      residual_se   = s$sigma
+    )
+  }) %>%
+  ungroup()
+# the model through (0,0) has higher R squared values. retain all calculations for protein per mg using that modelcalculated
+```
+
+
+take the averages per homogenate
 
 ```{r}
 bca_summary <- bca %>%
@@ -391,6 +485,157 @@ bca_summary <- bca %>%
 ```
 
 
+
+
+
+# Pierce
+```{r}
+setwd('..')
+pierce <- read.csv("data/pierce660_1to4dilution.csv")
+```
+```{r}
+pierce_std_key <- tibble(
+  std_id = c("PBS","A","B","C","D","E","F","G"),
+  known_ug_ml = c(0, 125, 250, 500, 750, 1000, 1500, 2000)
+) %>%
+  mutate(known_mg_ml = known_ug_ml / 1000)
+
+#extract homogenaate, tech rep, and dilution factor from the well_content column
+pierce <- pierce %>%
+  mutate(
+    type = if_else(str_detect(well_content, "^Hom\\s"), "unknown", "standard"),
+    homogenate = if_else(
+      type == "unknown",
+      as.numeric(str_match(well_content, "^Hom\\s+(\\d+)")[,2]),
+      NA_real_
+    ),
+    tech_rep = str_match(well_content, "(R\\d+)")[,2],
+    dilution_factor_unknownsample_pbs = str_match(well_content, "(1:\\d+)")[,2],
+    std_id = if_else(
+      type == "standard",
+      str_match(well_content, "\\b(PBS|A|B|C|D|E|F|G)\\b")[,2],
+      NA_character_
+    )
+  ) %>%
+  left_join(pierce_std_key, by = "std_id") # add in the id names for the standards
+
+pierce %>% filter(type=="standard") %>% count(std_id) # check we have 3 from each plate
+
+```
+blank correction using PBS wells for each plate
+```{r}
+pierce_blank_df <- pierce %>%
+  filter(type == "standard", std_id == "PBS") %>%
+  group_by(plate) %>%
+  summarise(pierce_blank_abs = mean(absorbance_660, na.rm = TRUE), .groups = "drop")
+
+pierce <- pierce %>%
+  left_join(pierce_blank_df, by = "plate") %>%
+  mutate(abs660_blankcorr = absorbance_660 - pierce_blank_abs)
+
+```
+
+create standard curve for pierce assay
+```{r}
+pierce_std_df <- pierce %>%
+  filter(type == "standard") %>%
+  drop_na(known_mg_ml, abs660_blankcorr)
+
+pierce_coefs <- pierce_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs660_blankcorr ~ 0 + known_mg_ml, data = .)
+    tibble(
+      slope = coef(fit)[1]
+    )
+  }) %>%
+  ungroup()
+
+```
+let's check the fit of our model to each plate
+
+```{r}
+pierce_fit_stats <- pierce_std_df %>%
+  group_by(plate) %>%
+  do({
+    fit <- lm(abs660_blankcorr ~ 0 + known_mg_ml, data = .)
+    s <- summary(fit)
+
+    tibble(
+      slope = coef(fit)[1],
+      r_squared = s$r.squared,
+      adj_r_squared = s$adj.r.squared,
+      residual_se = s$sigma
+    )
+  }) %>%
+  ungroup()
+
+pierce_fit_stats
+
+
+pierce_lines <- pierce_coefs %>%
+  crossing(
+    known_mg_ml = seq(
+      min(pierce_std_df$known_mg_ml),
+      max(pierce_std_df$known_mg_ml),
+      length.out = 200
+    )
+  ) %>%
+  mutate(pred_abs = slope * known_mg_ml)
+
+ggplot(pierce_std_df, aes(x = known_mg_ml, y = abs660_blankcorr)) +
+  facet_wrap(~plate) +
+  geom_point(size = 3) +
+  geom_line(
+    data = pierce_lines,
+    aes(x = known_mg_ml, y = pred_abs),
+    color = "blue",
+    linewidth = 1.2
+  ) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Protein (mg/mL)",
+    y = "Blank-corrected Abs 660"
+  )
+
+```
+
+
+```{r}
+pierce <- pierce %>%
+  left_join(pierce_coefs, by = "plate")
+
+pierce <- pierce %>%
+  mutate(
+    protein_mg_ml_calc = abs660_blankcorr / slope,
+    protein_mg_ml_final = if_else(
+      dilution_factor_unknownsample_pbs == "1:4",
+      protein_mg_ml_calc * 4,
+      protein_mg_ml_calc
+    )
+  )
+
+
+```
+
+```{r}
+pierce_summary <- pierce %>%
+  filter(type == "unknown") %>%
+  mutate(homogenate = as.numeric(homogenate)) %>%
+  group_by(plate, homogenate) %>%
+  summarise(
+    mean_protein_mg_ml = mean(protein_mg_ml_final, na.rm = TRUE),
+    sd_protein_mg_ml   = sd(protein_mg_ml_final, na.rm = TRUE),
+    n = sum(!is.na(protein_mg_ml_final)),
+    .groups = "drop"
+  )
+
+#flag homogenates that fell below pierce detection limit
+pierce_summary <- pierce_summary %>%
+  mutate(
+    protein_flag_low = mean_protein_mg_ml <= 0
+  )
+```
 
 
 #Blastogenic stage & metadata
@@ -449,20 +694,57 @@ The column sod_avg is in activity units/mL and the column bca_avg is in mg/mL.
 
 ```{r}
 assay_combo <- bca_summary %>%
-  full_join(sod_summary, by = c("homogenate")) %>%
-   rename(
-    n_bca = n.x,
-    n_sod = n.y,
-    plate_bca = plate.x,
-    plate_sod = plate.y
-  )
+  # rename BCA protein column before joining
+  rename(
+    bca_mean_protein_mg_mL = mean_protein_mg_ml,
+    bca_sd_protein_mg_mL   = sd_protein_mg_ml,
+    n_bca                  = n,
+    plate_bca              = plate
+  ) %>%
+  full_join(
+    sod_summary %>%
+      rename(
+        n_sod     = n,
+        plate_sod = plate
+      ),
+    by = "homogenate"
+  ) %>%
+  full_join(
+    pierce_summary %>%
+      rename(
+        pierce_mean_protein_mg_mL = mean_protein_mg_ml,
+        pierce_sd_protein_mg_mL   = sd_protein_mg_ml,
+        n_pierce                  = n,
+        plate_pierce              = plate
+      ),
+    by = "homogenate"
+  ) 
 
+
+
+```
+
+calculate sod per mg of protein for each asay
+
+```{r}
 assay_combo <- assay_combo %>%
   mutate(
-    sod_u_mg = mean_sod / mean_protein_mg_ml
+    sod_u_mg_bca = mean_sod / bca_mean_protein_mg_mL,
+    sod_u_mg_pierce = mean_sod / pierce_mean_protein_mg_mL
   )
 
 ```
+
+given that we did a 1:4 dilution of the pierce assay, it likely is that the values calculated here are unreliable. plate 2 is particulary unreliable given the spread of the data in the standard curve
+
+flag the outliers 
+```{r}
+assay_combo <- assay_combo %>%
+  mutate(
+    pierce_flag_unreliable = pierce_mean_protein_mg_mL < 0.01
+  )
+```
+
 
 ```{r}
 combo_metadata <- assay_combo %>%
@@ -579,66 +861,8 @@ ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
 ```
 
 
-Fancy kruskil-wallis done in plot, no need to use
-```{r}
-library(ggstatsplot)
-setwd('..')
-png(filename = "output/violin_sod_krusk_wilcoxn_hompcorrection.png", width = 1800, height = 1800)
-grouped_ggbetweenstats(
-  data = combo,
-  x = NiCl2.Nom.Conc.,
-  y = sod_u_mg,
-  grouping.var = hpe,
-  type = "all",
-  outlier.tagging = TRUE,
-  xlab = "Nominal NiCl2 (mg/L)",
-  ylab = "SOD1 U/mg",
-  pairwise.display = "all",
-  results.subtitle = FALSE,
-  digits = 2L,
-  package = "wesanderson", ## package from which color palette is to be taken
-  palette = "Moonrise3",  
-   ggsignif.args = list(
-    textsize = 10,      # this controls the text size of the pairwise comparisons
-    tip_length = 0.1,
-    step_increase = 0.2
-  ),
-  point.args = list(
-    alpha = 1,
-    size = 10),
-  centrality.point.args = list(size = 10, color = "orangered3"),
-  centrality.label.args = list(
-    alpha = 0,
-    size  = 9, 
-    nudge_x = 0.5, 
-    nudge_y = 9),
-  ggplot.component = list (
-    ggplot2::scale_y_continuous(
-    breaks = seq(0, 6, by = 0.5),
-    limits = (c(0, 6))),
-    theme(
-    axis.ticks = element_blank(),
-    axis.line = element_line(colour = "grey50"),
-    panel.grid = element_line(color = "#b4aea9"),
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.major.y = element_line(linetype = "dashed"),
-    panel.background = element_rect(fill = "white", color = "white"),
-    plot.background = element_rect(fill = "white", color = "white"),
-    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
-    axis.title = element_text(size = 40),
-    axis.text.y = element_text(size = 30, hjust = 1.5, margin = margin(r = 20)),
-    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20))
-  )
- ) 
-) 
-dev.off()
 
-```
-
-
-
-
+## compares stage
 ```{r}
 
 # Ensure concentrations plot in numeric order (but treated as discrete groups)
@@ -655,7 +879,7 @@ n_counts <- combo_plot %>%
 
 ```
 
-just violin
+# Violin with all points
 ```{r}
 
 ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
@@ -691,19 +915,23 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
     axis.text.x = element_text(vjust = 2, margin = margin(t = 10))
   )
 
-#ggsave("output/violin_sod_median_facets.png", p_violin, width = 12, height = 5, dpi = 300)
 
 
 ```
 # Just boxplot, Final Figure 
 
 ```{r}
+str(combo_plot)
+```
+
+
+```{r}
 png(filename = "../output/boxplot_sod_RnormalizedBCA.png", width = 1300, height = 850)
 ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
-  geom_boxplot(width = 0.7, outlier.shape = NA, alpha = 0.6) +
+  geom_boxplot(width = 0.7, outlier.shape = 5, alpha = 0.6) +
   geom_jitter(width = 0.01, height = 0, size = 4, alpha = 0.9,
               aes(color = simple_stage)) +
-  stat_summary(fun = median, geom = "point", size = 4, color="blue") +
+  stat_summary(fun = mean, geom = "point", size = 4, color="blue") +
   facet_wrap(~ hpe, nrow = 1,
              labeller = labeller(
     hpe = function(x) paste0(x, " hpe"))) +
@@ -721,7 +949,7 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
   theme_minimal(base_size = 18) +
   theme(
     axis.ticks = element_blank(),
-    axis.line = element_line(colour = "grey50"),
+    axis.line = element_line(colour = "white"),
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
     panel.grid.major.y = element_line(linetype = "dashed"),
@@ -736,6 +964,73 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
   )
 dev.off()
 ```
+
+
+```{r}
+png(filename = "../output/boxplot_sod_RnormalizedBCA_alt.png", width = 1300, height = 850)
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
+
+  # boxplot
+  geom_boxplot(width = 0.65, outlier.shape = NA, alpha = 0.5, color = "black") +
+
+  # raw points colored by stage
+  geom_jitter(
+    aes(color = simple_stage),
+    width = 0.12, height = 0,
+    size = 3.5, alpha = 0.9
+  ) +
+
+  # mean diamond
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 18,        # diamond
+    size = 6,
+    color = "blue"
+  ) +
+
+
+  facet_wrap(~ hpe, nrow = 1,
+             labeller = labeller(hpe = function(x) paste0(x, " hpe"))) +
+
+  scale_y_continuous(
+    breaks = seq(0, 4, by = 0.5),
+    limits = c(0, 4),
+    expand = c(0.02, 0.02)
+  ) +
+
+  labs(
+    x = "Nominal Nickel (II) Chloride Concentration (mg/L)",
+    y = "SOD1 Activity (U/mg protein)",
+    color = "Blastogenic stage"
+  ) +
+
+  # n labels
+  geom_text(
+    data = n_counts,
+    aes(x = NiCl2.Nom.Conc., y = 0.05, label = paste0("n=", n)),
+    size = 6,
+    inherit.aes = FALSE
+  ) +
+
+  # color palette (softer & professional)
+  scale_color_brewer(palette = "Dark2") +
+
+  theme_classic(base_size = 18) +
+  theme(
+    strip.text = element_text(size = 22, face = "bold"),
+    axis.title = element_text(size = 22),
+    axis.text = element_text(size = 16),
+    legend.title = element_text(size = 16),
+    legend.text = element_text(size = 14),
+    legend.position = "right",
+    panel.background = element_rect(fill = "white", color = "black"),
+    legend.key = element_rect(fill = "white", color = NA)
+  )
+dev.off()
+```
+
+
 combine them (boxplot + violin)
 ```{r}
 ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
@@ -767,15 +1062,7 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
 
 
 
-```{r}
-ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = NiCl2.Nom.Conc.)) +
-  geom_violin(trim = FALSE) +
-  facet_wrap(~ hpe) +
-  labs(title = "Violin Plot of SOD Activity (u/mg) by Treatment and HPE",
-       fill = "Nickel Concentration",
-       x = "Treatment",
-       y = "SOD Activity") 
-```
+
 
 # Statistical Analysis
 
@@ -802,13 +1089,56 @@ shapiro.test(combo$sod_u_mg)
 leveneTest(sod_u_mg ~ NiCl2.Nom.Conc., data = combo)
 ```
 
+```{r}
+library(car)
+# make sure factors are factors
+combo <- combo %>%
+  mutate(
+    hpe = factor(hpe),
+    NiCl2.Nom.Conc. = factor(NiCl2.Nom.Conc.)
+  )
+
+fit <- lm(sod_u_mg ~ hpe * NiCl2.Nom.Conc., data = combo)
+
+# ANOVA table (base)
+anova(fit)
+
+# Better for unbalanced designs:
+Anova(fit, type = 2)   # or type = 3 if you *really* need it (see note below)
+
+```
+
+```{r}
+# Normality of residuals
+shapiro.test(resid(fit))
+
+# Homogeneity of variance across cells (hpe x conc)
+car::leveneTest(resid(fit) ~ interaction(hpe, NiCl2.Nom.Conc.), data = combo)
+
+# Plots you should actually look at
+par(mfrow=c(1,2))
+plot(fit, which = 1)  # residuals vs fitted
+plot(fit, which = 2)  # QQ plot
+par(mfrow=c(1,1))
+
+```
+
+```{r}
+library(emmeans)
+
+emm <- emmeans(fit, ~ NiCl2.Nom.Conc. | hpe)
+
+pairs(emm, adjust = "tukey")
+
+```
+
+
 ## ANOVA Conclusions
 
-SOD1 activity does not differ across nickel concentration treatment groups or even the control at either the 24 or 96 hours post exposure mark.
+Two-way ANOVA detected a significant main effect of nickel concentration on SOD activity (F₂,₃₉ = 3.47, p = 0.041), while no effect of time (p = 0.193) or interaction between time and concentration (p = 0.525) was observed.
 
-# Next Steps?
+Post-hoc Tukey–Kramer comparisons conducted within each timepoint indicated no differences among concentrations at 24 hpe (all p > 0.39). At 96 hpe, SOD activity at 1 mg/L was elevated relative to controls, though this difference did not reach statistical significance after multiple-comparison correction (p = 0.054). No differences were detected between 100 mg/L and other concentrations.
 
-There could be various reasons why we did not observe the expected effect of increased SOD activity with increasing concentrations of nickel.
 
 ## Power Analysis
 Currently this will only work below if the groups are of equal sample size. Because I have yet to re-process the homogenate 37 (the final replicate for the control) this analysis cannot work.
@@ -851,4 +1181,70 @@ Note that n = 7.5 is in relation to the unequal sample sizes per group which is 
 Power (0.1781299): The power of 0.1238 indicates that this study has a low probability (approximately 17.8%) of detecting the true effect (f = 0.2437383) under the current conditions (sample sizes, effect size, and significance level).
 
 Considerations: To increase power, we may need to consider increasing the sample size per group, using more sensitive measures, or adjusting your study design to reduce variability.
+
+# DO NOT USE this plot for THESIS Fancy way of doing paired t-test and pholmes adjusted done in plot, do not use for thesis
+```{r}
+
+#library(ggstatsplot)
+
+#setwd('..')
+#png(filename = "output/violin_sod_hompcorrection_comparetreatments.png", width = 1800, height = 1800)
+#grouped_ggbetweenstats(
+#  data = combo,
+#  x = NiCl2.Nom.Conc.,
+#  y = sod_u_mg,
+#  grouping.var = hpe,
+#  type = "parametric",
+#  outlier.tagging = TRUE,
+#  xlab = "Nominal NiCl2 (mg/L)",
+# ylab = "SOD1 U/mg of protein",
+#  pairwise.display = "all",
+# results.subtitle = FALSE,
+# p.adjust.method = "holm", #does not have an option to show p-vlaues calculated with tukey
+#  digits = 2L,
+#  package = "wesanderson", ## package from which color palette is to be taken
+#  palette = "Moonrise3",  
+#   ggsignif.args = list(
+#    textsize = 10,      # this controls the text size of the pairwise comparisons
+#    tip_length = 0.1,
+#    step_increase = 0.2
+#  ),
+#  annotation.args = list(
+#    tag_levels = 'A',
+#    theme = theme(plot.title = element_text(size = 40),
+#                  plot.tag_levels = element_text(size = 40))
+#  ),
+#  point.args = list(
+#    alpha = 1,
+#    size = 10),
+#  centrality.point.args = list(size = 10, color = "orangered3"),
+#  centrality.label.args = list(
+#    alpha = 0,
+#    size  = 9, 
+#    nudge_x = 0.5, 
+#    nudge_y = 9),
+#  ggplot.component = list (
+#    ggplot2::scale_y_continuous(
+#    breaks = seq(0, 5, by = 0.5),
+#    limits = (c(0, 5))),
+#    theme(
+#    axis.ticks = element_blank(),
+#    axis.line = element_line(colour = "grey50"),
+#    panel.grid = element_line(color = "#b4aea9"),
+#    panel.grid.minor = element_blank(),
+#    panel.grid.major.x = element_blank(),
+#    panel.grid.major.y = element_line(linetype = "dashed"),
+#    panel.background = element_rect(fill = "white", color = "white"),
+#    plot.background = element_rect(fill = "white", color = "white"),
+#    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
+#    axis.title = element_text(size = 40),
+#    strip.text = element_text(size = 40),
+#    axis.text.y = element_text(size = 30, hjust = 1.5, margin = margin(r = 20)),
+#    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20))
+#  )
+# ) 
+#) 
+#dev.off()
+
+```
 
