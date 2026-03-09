@@ -228,23 +228,9 @@ sod_lines <- sod_coefs %>%
   mutate(
     pred_abs = a_coef_sod + b_coef_sod * log(known_sod_u_ml)
   )
-
-ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
-  facet_wrap(~plate) +
-  geom_point(size = 3) +
-  geom_line(
-    data = sod_lines,
-    aes(x = known_sod_u_ml, y = pred_abs),
-    color = "red",
-    linewidth = 1
-  ) +
-  theme_classic(base_size = 14) +
-  labs(
-    x = "Known SOD (U/mL)",
-    y = "Blank-corrected ΔA450"
-  )
-
 ```
+
+
 
 ## SOD Calculation in R
 ```{r}
@@ -278,6 +264,32 @@ sod_summary <- sod %>%
     .groups = "drop"
   )
 
+```
+
+```{r}
+png(filename = "../output/SOD_standard_curve.png", width = 900, height = 750)
+ggplot(std_df, aes(x = known_sod_u_ml, y = blank_corrected_abs)) +
+  facet_wrap(~plate, 
+             labeller = labeller(plate = function(x) paste("Plate", x))) +
+  geom_point(size = 4) +
+  geom_line(
+    data = sod_lines,
+    aes(x = known_sod_u_ml, y = pred_abs),
+    color = "red",
+    linewidth = 1.5
+  ) +
+  theme_classic(base_size = 22) +  # larger overall text
+  theme(
+    strip.text = element_text(size = 24, face = "bold"),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 20)
+  ) +
+  labs(
+    x = "Known SOD (U/mL)",
+    y = "Blank-corrected ΔA450"
+  )
+
+dev.off()
 ```
 
 ```{r}
@@ -347,29 +359,6 @@ bca <- bca %>%
   mutate(abs562_blankcorr = abs562 - bca_blank_abs)
 ```
 
-```{r}
-# make sure to drop the na for standard D tech rep 3 of plate 1
-bca_std_df <- bca %>%
-  filter(type == "standard", !is.na(known_mg_ml)) %>%
-  filter(!is.na(abs562), !is.na(abs562_blankcorr))
-
-
-ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562_blankcorr)) +
-  facet_wrap(~plate) +
-  geom_point(size = 3) +
-  geom_smooth(method = "lm",
-              formula = y ~ 0 + x,
-              se = FALSE,
-              color = "blue",
-              linewidth = 1.2) +
-  theme_classic(base_size = 14) +
-  labs(
-    x = "BSA standard (mg/mL)",
-    y = "Blank-corrected absorbance @562"
-  )
-
-```
-
 
 Create a linear model to fit standard and unknown data
 ```{r}
@@ -395,7 +384,7 @@ bca <- bca %>%
     protein_mg_ml_calc = abs562_blankcorr / b_slope_bca,
     protein_mg_ml_final = if_else(
       type == "unknown",
-      protein_mg_ml_calc * 4,   # your 1:4 dilution
+      protein_mg_ml_calc * 5,   # 4 sample: 16 PBS (uL) so actually a 1:5 dilution. ignore columns and multiply by 5
       protein_mg_ml_calc        # standards: leave as-is
     )
   )
@@ -435,8 +424,48 @@ bca_fit_stats <- bca_std_df %>%
 
 ```
 
+
 ```{r}
-# coefficients per plate (with intercept) comapre for sanity check that we should force the model through (0,0)
+# make sure to drop the na for standard D tech rep 3 of plate 1
+
+png(filename = "../output/BCA_standard_curve.png", width = 900, height = 750)
+
+ggplot(bca_std_df, aes(x = known_mg_ml, y = abs562_blankcorr)) +
+  facet_wrap(~plate,
+             nrow = 1,
+             labeller = labeller(plate = function(x) paste("Plate", x))) +
+  geom_point(size = 3.5) +
+  geom_smooth(method = "lm",
+              formula = y ~ 0 + x,
+              se = FALSE,
+              color = "blue",
+              linewidth = 1.4) +
+  geom_text(
+    data = bca_fit_stats,
+    aes(label = paste0("R² = ", sprintf("%.3f", r_squared))),
+    x = Inf,
+    y = Inf,
+    hjust = 1.1,
+    vjust = 1.5,
+    size = 6,
+    inherit.aes = FALSE
+  ) +
+  theme_classic(base_size = 20) +
+  theme(
+    strip.text = element_text(size = 22, face = "bold"),
+    axis.title = element_text(size = 22),
+    axis.text = element_text(size = 18),
+    panel.spacing = unit(0.8, "lines")
+  ) +
+  labs(
+    x = "BSA standard (mg/mL)",
+    y = "Blank-corrected absorbance @562"
+  )
+dev.off()
+```
+
+```{r}
+# coefficients per plate (with intercept) compare for sanity check that we should force the model through (0,0)
 bca_coefs_intercept <- bca_std_df %>%
   group_by(plate) %>%
   do({
@@ -500,7 +529,7 @@ pierce_std_key <- tibble(
 ) %>%
   mutate(known_mg_ml = known_ug_ml / 1000)
 
-#extract homogenaate, tech rep, and dilution factor from the well_content column
+#extract homogenate, tech rep, and dilution factor from the well_content column
 pierce <- pierce %>%
   mutate(
     type = if_else(str_detect(well_content, "^Hom\\s"), "unknown", "standard"),
@@ -610,7 +639,7 @@ pierce <- pierce %>%
     protein_mg_ml_calc = abs660_blankcorr / slope,
     protein_mg_ml_final = if_else(
       dilution_factor_unknownsample_pbs == "1:4",
-      protein_mg_ml_calc * 4,
+      protein_mg_ml_calc * 5, # did a dilution of 4 ul of protein to 16 ul of pbs (so even though it says 1:4 its a dilution of 5)
       protein_mg_ml_calc
     )
   )
@@ -720,11 +749,11 @@ assay_combo <- bca_summary %>%
     by = "homogenate"
   ) 
 
-
+# pierce data appears too variable and inconsistent. For this analysis, we will keep to BCA assay for normalziation in final figures but exploratory plots may be made below with pierce assay normalized sod
 
 ```
 
-calculate sod per mg of protein for each asay
+calculate sod per mg of protein for each assay
 
 ```{r}
 assay_combo <- assay_combo %>%
@@ -760,9 +789,10 @@ combo <- combo_metadata %>%
   )
 ```
 
+Since all graphs below will use the bca data to normalize (had a more robust standard curve) let us filter out just na for sod_u_mg_bca. 
 ```{r}
 combo <- combo %>%
-  filter(!is.na(sod_u_mg)) %>%
+  filter(!is.na(sod_u_mg_bca)) %>%
   filter(NiCl2.Nom.Conc. != 10) 
 summary(combo)
 ```
@@ -796,9 +826,11 @@ summary(combo96)
 
 
 # Exploratory Plots
+
+stage by 24 hours post exposure
 ```{r}
 
-ggplot(combo24, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
+ggplot(combo24, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca, fill = hpe)) +
   geom_point() +
   geom_violin(trim = FALSE) +
   facet_wrap(~ simple_stage) +
@@ -808,10 +840,10 @@ ggplot(combo24, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
        y = "SOD Activity") 
 
 ```
-
+stage by 96 hours post exposure
 ```{r}
 
-ggplot(combo96, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
+ggplot(combo96, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca, fill = hpe)) +
   geom_point() +
   geom_violin(trim = FALSE) +
   facet_wrap(~ simple_stage) +
@@ -823,7 +855,7 @@ ggplot(combo96, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
 
 ```{r}
 
-ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
+ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca, fill = hpe)) +
   geom_point() +
   geom_violin(trim = FALSE) +
   facet_wrap(~ simple_stage, ncol=2) +
@@ -853,7 +885,7 @@ ggplot(combo, aes(x = NiCl2.Nom.Conc., y = mean_sod, fill = NiCl2.Nom.Conc.)) +
 ## SOD1 activity normalized to the protein content per sample:
 ```{r, eval=TRUE}
 
-ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg, fill = hpe)) +
+ggplot(combo, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca, fill = hpe)) +
   geom_violin(trim = FALSE)  +
   labs(title = "Violin Plot of SOD Activity (u/mg) by Nickel and hpe",
        x = "Nickel Concnetration mg/L",
@@ -882,7 +914,7 @@ n_counts <- combo_plot %>%
 # Violin with all points
 ```{r}
 
-ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca)) +
   geom_violin(trim = FALSE, width = 0.9, alpha = 0.6) +
   geom_jitter(width = 0.12, height = 0, size = 3, alpha = 0.9) +
   # Median dot per group
@@ -927,7 +959,7 @@ str(combo_plot)
 
 ```{r}
 png(filename = "../output/boxplot_sod_RnormalizedBCA.png", width = 1300, height = 850)
-ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca)) +
   geom_boxplot(width = 0.7, outlier.shape = 5, alpha = 0.6) +
   geom_jitter(width = 0.01, height = 0, size = 4, alpha = 0.9,
               aes(color = simple_stage)) +
@@ -957,18 +989,18 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
     plot.background  = element_rect(fill = "white", color = "white"),
     strip.background = element_rect(fill = "grey"),
     strip.text = element_text(size = 28, face = "bold"),
-    axis.text = element_text(size = 18),
-    axis.title = element_text(size = 30),
+    axis.text = element_text(size = 25),
+    axis.title = element_text(size = 45),
     axis.text.y = element_text(hjust = 1.2, margin = margin(r = 10), size = 25),
     axis.text.x = element_text(vjust = 2, margin = margin(t = 10), size =25)
   )
 dev.off()
 ```
 
-
+#FINAL FIGURE
 ```{r}
 png(filename = "../output/boxplot_sod_RnormalizedBCA_alt.png", width = 1300, height = 850)
-ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca)) +
 
   # boxplot
   geom_boxplot(width = 0.65, outlier.shape = NA, alpha = 0.5, color = "black") +
@@ -985,7 +1017,7 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
     fun = mean,
     geom = "point",
     shape = 18,        # diamond
-    size = 6,
+    size = 8,
     color = "blue"
   ) +
 
@@ -1019,11 +1051,11 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
   theme_classic(base_size = 18) +
   theme(
     strip.text = element_text(size = 22, face = "bold"),
-    axis.title = element_text(size = 22),
-    axis.text = element_text(size = 16),
-    legend.title = element_text(size = 16),
-    legend.text = element_text(size = 14),
-    legend.position = "right",
+    axis.title = element_text(size = 30),
+    axis.text = element_text(size = 25),
+    legend.title = element_text(size = 25),
+    legend.text = element_text(size = 25),
+    legend.position = "bottom",
     panel.background = element_rect(fill = "white", color = "black"),
     legend.key = element_rect(fill = "white", color = NA)
   )
@@ -1033,13 +1065,13 @@ dev.off()
 
 combine them (boxplot + violin)
 ```{r}
-ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca)) +
     geom_violin(trim = FALSE, width = 0.9, alpha = 0.6) +
   geom_boxplot(width = 0.7, outlier.shape = NA, alpha = 0.6) +
   geom_jitter(width = 0.12, height = 0, size = 3, alpha = 0.9) +
   stat_summary(fun = median, geom = "point", size = 4, color="blue") +
   facet_wrap(~ hpe, nrow = 1) +
-  scale_y_continuous(breaks = seq(0, 40, by = 10), limits = c(0, 40)) +
+  scale_y_continuous(breaks = seq(0, 4, by = 0.5), limits = c(0, 4)) +
   labs(x = "Nickel (II) Chloride Concentration (mg/L)", y = "SOD1 (U/mg)") +
   theme_minimal(base_size = 18) +
   theme(
@@ -1061,52 +1093,108 @@ ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg)) +
 
 
 
+#FINAL FIGURE for PRESENTATION
+```{r}
+png(filename = "../output/presentation_boxplot_sod_RnormalizedBCA_alt.png", width = 1000, height = 850)
+ggplot(combo_plot, aes(x = NiCl2.Nom.Conc., y = sod_u_mg_bca)) +
+
+  # boxplot
+  geom_boxplot(width = 0.65, outlier.shape = NA, alpha = 0.5, color = "black") +
+
+  # raw points colored by stage
+  geom_jitter(
+    aes(color = simple_stage),
+    width = 0.12, height = 0,
+    size = 3.5, alpha = 0.9
+  ) +
+
+  # mean diamond
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 18,        # diamond
+    size = 8,
+    color = "blue"
+  ) +
+
+
+  facet_wrap(~ hpe, nrow = 1,
+             labeller = labeller(hpe = function(x) paste0(x, " hpe"))) +
+
+  scale_y_continuous(
+    breaks = seq(0, 4, by = 0.5),
+    limits = c(0, 4),
+    expand = c(0.02, 0.02)
+  ) +
+
+  labs(
+    x = "Nominal Nickel (II) Chloride Concentration (mg/L)",
+    y = "SOD1 Activity (U/mg protein)",
+    color = "Blastogenic stage"
+  ) +
+
+  # n labels
+  geom_text(
+    data = n_counts,
+    aes(x = NiCl2.Nom.Conc., y = 0.05, label = paste0("n=", n)),
+    size = 6,
+    inherit.aes = FALSE
+  ) +
+
+  # color palette (softer & professional)
+  scale_color_brewer(palette = "Dark2") +
+
+  theme_classic(base_size = 18) +
+  theme(
+    strip.text = element_text(size = 22, face = "bold"),
+    axis.title = element_text(size = 30),
+    axis.text = element_text(size = 25),
+    legend.title = element_text(size = 25),
+    legend.text = element_text(size = 25),
+    legend.position = "bottom",
+    panel.background = element_rect(fill = "white", color = "black"),
+    legend.key = element_rect(fill = "white", color = NA)
+  )
+dev.off()
+```
+
 
 
 
 # Statistical Analysis
 
 We will run a two-way ANOVA on the data exploring sod1 activity units/mg of protein by hours post exposure and nickel concentration.
-
 ```{r}
-# Perform ANOVA
-anova_result <- aov(sod_u_mg ~ hpe * NiCl2.Nom.Conc., data = combo)
-
-# Summarize ANOVA results
-summary(anova_result)
+summary(combo)
 ```
 
-## ANOVA assumptions
-
-```{r}
-# Check histogram of transformed data
-hist(combo$sod_u_mg, main = "Distribution", xlab = "SOD U/mg")
-
-# Check normality of data (optional)
-shapiro.test(combo$sod_u_mg)
-
-# Perform Levene's test on data
-leveneTest(sod_u_mg ~ NiCl2.Nom.Conc., data = combo)
-```
 
 ```{r}
 library(car)
-# make sure factors are factors
+# make sure independent variables are saved as factors in data frame
 combo <- combo %>%
   mutate(
     hpe = factor(hpe),
     NiCl2.Nom.Conc. = factor(NiCl2.Nom.Conc.)
   )
 
-fit <- lm(sod_u_mg ~ hpe * NiCl2.Nom.Conc., data = combo)
+fit <- lm(sod_u_mg_bca ~ hpe * NiCl2.Nom.Conc., data = combo)
 
 # ANOVA table (base)
 anova(fit)
 
-# Better for unbalanced designs:
-Anova(fit, type = 2)   # or type = 3 if you *really* need it (see note below)
+# Better for unbalanced designs than aov() function in base R
+Anova(fit, type = 2)   
 
 ```
+
+## ANOVA assumptions
+
+```{r}
+# Check histogram of transformed data
+hist(combo$sod_u_mg_bca, main = "Distribution", xlab = "SOD U/mg")
+```
+
 
 ```{r}
 # Normality of residuals
@@ -1126,18 +1214,20 @@ par(mfrow=c(1,1))
 ```{r}
 library(emmeans)
 
-emm <- emmeans(fit, ~ NiCl2.Nom.Conc. | hpe)
-
+emm <- emmeans(fit, ~ NiCl2.Nom.Conc.) #since only ni treatment produced a sig p value, we will collapse across hpe (time) and evaluate pairwise comparisons for just treatment
 pairs(emm, adjust = "tukey")
+
+#notes: maybe run an LSD
+pairs(emm, adjust = "none") 
 
 ```
 
 
 ## ANOVA Conclusions
 
-Two-way ANOVA detected a significant main effect of nickel concentration on SOD activity (F₂,₃₉ = 3.47, p = 0.041), while no effect of time (p = 0.193) or interaction between time and concentration (p = 0.525) was observed.
+Two-way ANOVA detected a significant main effect of nickel concentration on SOD activity  (F₂,₃₉ = 3.47, p = 0.041), while no effect of time (p = 0.193) or interaction between time and concentration (p = 0.525) was observed.
 
-Post-hoc Tukey–Kramer comparisons conducted within each timepoint indicated no differences among concentrations at 24 hpe (all p > 0.39). At 96 hpe, SOD activity at 1 mg/L was elevated relative to controls, though this difference did not reach statistical significance after multiple-comparison correction (p = 0.054). No differences were detected between 100 mg/L and other concentrations.
+Post-hoc Tukey–Kramer comparisons conducted collapsing timepoints and evaluating ni conc only saw no differences among concentrations p > 0.05. At 96 hpe, SOD activity at 1 mg/L was elevated relative to controls, though this difference did not reach statistical significance after multiple-comparison correction (p = 0.054). No differences were detected between 100 mg/L and other concentrations.
 
 
 ## Power Analysis
@@ -1182,69 +1272,87 @@ Power (0.1781299): The power of 0.1238 indicates that this study has a low proba
 
 Considerations: To increase power, we may need to consider increasing the sample size per group, using more sensitive measures, or adjusting your study design to reduce variability.
 
-# DO NOT USE this plot for THESIS Fancy way of doing paired t-test and pholmes adjusted done in plot, do not use for thesis
+## Krusk Wallis test non parametric analysis
+
 ```{r}
 
-#library(ggstatsplot)
+kruskal.test(sod_u_mg_bca ~ NiCl2.Nom.Conc., data = combo) # all data collapsed across time points
+kruskal.test(sod_u_mg_bca ~ NiCl2.Nom.Conc., data = combo96) # for 96 hpe
+kruskal.test(sod_u_mg_bca ~ NiCl2.Nom.Conc., data = combo24) # for 24 hpe
+```
 
-#setwd('..')
-#png(filename = "output/violin_sod_hompcorrection_comparetreatments.png", width = 1800, height = 1800)
-#grouped_ggbetweenstats(
-#  data = combo,
-#  x = NiCl2.Nom.Conc.,
-#  y = sod_u_mg,
-#  grouping.var = hpe,
-#  type = "parametric",
-#  outlier.tagging = TRUE,
-#  xlab = "Nominal NiCl2 (mg/L)",
-# ylab = "SOD1 U/mg of protein",
-#  pairwise.display = "all",
-# results.subtitle = FALSE,
-# p.adjust.method = "holm", #does not have an option to show p-vlaues calculated with tukey
-#  digits = 2L,
-#  package = "wesanderson", ## package from which color palette is to be taken
-#  palette = "Moonrise3",  
-#   ggsignif.args = list(
-#    textsize = 10,      # this controls the text size of the pairwise comparisons
-#    tip_length = 0.1,
-#    step_increase = 0.2
-#  ),
-#  annotation.args = list(
-#    tag_levels = 'A',
-#    theme = theme(plot.title = element_text(size = 40),
-#                  plot.tag_levels = element_text(size = 40))
-#  ),
-#  point.args = list(
-#    alpha = 1,
-#    size = 10),
-#  centrality.point.args = list(size = 10, color = "orangered3"),
-#  centrality.label.args = list(
-#    alpha = 0,
-#    size  = 9, 
-#    nudge_x = 0.5, 
-#    nudge_y = 9),
-#  ggplot.component = list (
-#    ggplot2::scale_y_continuous(
-#    breaks = seq(0, 5, by = 0.5),
-#    limits = (c(0, 5))),
-#    theme(
-#    axis.ticks = element_blank(),
-#    axis.line = element_line(colour = "grey50"),
-#    panel.grid = element_line(color = "#b4aea9"),
-#    panel.grid.minor = element_blank(),
-#    panel.grid.major.x = element_blank(),
-#    panel.grid.major.y = element_line(linetype = "dashed"),
-#    panel.background = element_rect(fill = "white", color = "white"),
-#    plot.background = element_rect(fill = "white", color = "white"),
-#    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
-#    axis.title = element_text(size = 40),
-#    strip.text = element_text(size = 40),
-#    axis.text.y = element_text(size = 30, hjust = 1.5, margin = margin(r = 20)),
-#    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20))
-#  )
-# ) 
-#) 
-#dev.off()
+```{r}
+library(rstatix)
+#just the post hoc for 96 hpe
+dunn_test(sod_u_mg_bca ~ NiCl2.Nom.Conc., p.adjust.method = "holm", data= combo96)
+```
+
+
+so for 96 hpe there is a significant difference 
+
+
+```{r}
+
+library(ggstatsplot)
+
+setwd('..')
+png(filename = "output/violin_sod_hompcorrection_comparetreatments.png", width = 1800, height = 1800)
+grouped_ggbetweenstats(
+  data = combo,
+  x = NiCl2.Nom.Conc.,
+  y = sod_u_mg_bca,
+  grouping.var = hpe,
+  type = "non-parametric",
+  outlier.tagging = TRUE,
+  xlab = "Nominal NiCl2 (mg/L)",
+ ylab = "SOD1 U/mg of protein",
+  pairwise.display = "significant",
+ results.subtitle = FALSE,
+ p.adjust.method = "holm", #does not have an option to show p-vlaues calculated with tukey
+  digits = 2L,
+  package = "wesanderson", ## package from which color palette is to be taken
+  palette = "Moonrise3",  
+   ggsignif.args = list(
+    textsize = 10,      # this controls the text size of the pairwise comparisons
+    tip_length = 0.1,
+    step_increase = 0.2
+  ),
+  annotation.args = list(
+    tag_levels = 'A',
+    theme = theme(plot.title = element_text(size = 40),
+                  plot.tag_levels = element_text(size = 40))
+  ),
+  point.args = list(
+    alpha = 1,
+    size = 10),
+  centrality.point.args = list(size = 10, color = "orangered3"),
+  centrality.label.args = list(
+    alpha = 0,
+    size  = 9, 
+    nudge_x = 0.5, 
+    nudge_y = 9),
+  ggplot.component = list (
+    ggplot2::scale_y_continuous(
+    breaks = seq(0, 5, by = 0.5),
+    limits = (c(0, 5))),
+    theme(
+    axis.ticks = element_blank(),
+    axis.line = element_line(colour = "grey50"),
+    panel.grid = element_line(color = "#b4aea9"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(linetype = "dashed"),
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    axis.text = element_text(size = 30),   # Adjust the size of the axis labels
+    axis.title = element_text(size = 40),
+    strip.text = element_text(size = 40),
+    axis.text.y = element_text(size = 30, hjust = 1.5, margin = margin(r = 20)),
+    axis.text.x = element_text(size = 30, vjust = 3, hjust = 0.5, margin = margin(t = 20))
+  )
+ ) 
+) 
+dev.off()
 
 ```
 
